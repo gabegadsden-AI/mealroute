@@ -68,7 +68,7 @@ export default function Home() {
     notify(`${amount} ml of water added`);
   }
 
-  function usePhoto(file: File | undefined) {
+  async function usePhoto(file: File | undefined) {
     if (!file) return;
     setAnalysis(null);
     setAnalysisError("");
@@ -77,11 +77,24 @@ export default function Home() {
       if (current) URL.revokeObjectURL(current);
       return URL.createObjectURL(file);
     });
-    const reader = new FileReader();
-    reader.onload = () => setUploadedData(typeof reader.result === "string" ? reader.result : null);
-    reader.onerror = () => setAnalysisError("This photo could not be read. Please choose another image.");
-    reader.readAsDataURL(file);
     setModal("scan");
+    try {
+      const source = await createImageBitmap(file);
+      const maxDimension = 1400;
+      const scale = Math.min(1, maxDimension / Math.max(source.width, source.height));
+      const width = Math.max(1, Math.round(source.width * scale));
+      const height = Math.max(1, Math.round(source.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Photo processing is unavailable in this browser.");
+      context.drawImage(source, 0, 0, width, height);
+      source.close();
+      setUploadedData(canvas.toDataURL("image/jpeg", 0.78));
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "This photo could not be prepared. Please choose another image.");
+    }
   }
 
   async function analyzePhoto(answers: string[] = []) {
@@ -94,7 +107,15 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: uploadedData, answers, previousAnalysis: analysis }),
       });
-      const payload = await response.json();
+      const responseText = await response.text();
+      let payload: any;
+      try {
+        payload = JSON.parse(responseText);
+      } catch {
+        throw new Error(response.status === 413
+          ? "This photo is still too large. Please move farther away and retake it."
+          : `The analysis service returned an unexpected response (${response.status}). Please try again.`);
+      }
       if (!response.ok) throw new Error(payload.error || "The photo could not be analyzed.");
       setAnalysis(payload.analysis);
       setModal(answers.length === 0 && payload.analysis.clarifyingQuestions.length > 0 ? "clarify" : "result");
