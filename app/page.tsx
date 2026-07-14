@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
-type Meal = { id: number; type: string; name: string; calories: number; protein: number; time: string; eaten: boolean; locked?: boolean; color: string };
+type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string };
 type FoodAnalysis = {
   mealName: string;
   calories: { low: number; high: number; best: number };
   protein: number; carbs: number; fat: number; fibre: number;
-  ingredients: { name: string; amount: string; calories: number }[];
+  ingredients: { name: string; amount: string; calories: number; protein: number; carbs: number; fat: number }[];
   confidence: "High" | "Medium" | "Low";
   uncertainties: string[];
   clarifyingQuestions: string[];
@@ -22,10 +22,10 @@ type MealReview = {
 };
 
 const initialMeals: Meal[] = [
-  { id: 1, type: "Breakfast", name: "Greek yoghurt fruit bowl", calories: 380, protein: 26, time: "8:00 AM", eaten: true, color: "berry" },
-  { id: 2, type: "Lunch", name: "Turkey avocado wrap", calories: 510, protein: 38, time: "12:30 PM", eaten: true, locked: true, color: "wrap" },
-  { id: 3, type: "Dinner", name: "Salmon & roasted vegetables", calories: 620, protein: 46, time: "6:30 PM", eaten: false, color: "salmon" },
-  { id: 4, type: "Snack", name: "Apple with almond butter", calories: 210, protein: 6, time: "3:30 PM", eaten: false, color: "apple" },
+  { id: 1, type: "Breakfast", name: "Greek yoghurt fruit bowl", calories: 380, protein: 26, carbs: 48, fat: 10, time: "8:00 AM", eaten: true, color: "berry" },
+  { id: 2, type: "Lunch", name: "Turkey avocado wrap", calories: 510, protein: 38, carbs: 44, fat: 20, time: "12:30 PM", eaten: true, locked: true, color: "wrap" },
+  { id: 3, type: "Dinner", name: "Salmon & roasted vegetables", calories: 620, protein: 46, carbs: 38, fat: 28, time: "6:30 PM", eaten: false, color: "salmon" },
+  { id: 4, type: "Snack", name: "Apple with almond butter", calories: 210, protein: 6, carbs: 24, fat: 11, time: "3:30 PM", eaten: false, color: "apple" },
 ];
 
 const weekDays = [
@@ -55,6 +55,8 @@ export default function Home() {
 
   const consumed = meals.filter(m => m.eaten).reduce((sum, m) => sum + m.calories, 0);
   const protein = meals.filter(m => m.eaten).reduce((sum, m) => sum + m.protein, 0);
+  const carbs = meals.filter(m => m.eaten).reduce((sum, m) => sum + m.carbs, 0);
+  const fat = meals.filter(m => m.eaten).reduce((sum, m) => sum + m.fat, 0);
   const target = 1850;
   const pct = Math.min(100, Math.round((consumed / target) * 100));
 
@@ -140,17 +142,17 @@ export default function Home() {
     }
   }
 
-  function addAnalyzedMeal() {
+  function addAnalyzedMeal(destination: "today" | "plan" = "today") {
     if (!analysis) return;
     setMeals(items => [...items, {
-      id: Date.now(), type: "Logged meal", name: analysis.mealName,
-      calories: analysis.calories.best, protein: analysis.protein,
+      id: Date.now(), type: destination === "today" ? "Logged meal" : "Planned meal", name: analysis.mealName,
+      calories: analysis.calories.best, protein: analysis.protein, carbs: analysis.carbs, fat: analysis.fat,
       time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
-      eaten: true, color: "salmon",
+      eaten: destination === "today", color: "salmon",
     }]);
     setModal(null);
-    setTab("today");
-    notify(`${analysis.mealName} added to today`);
+    setTab(destination);
+    notify(destination === "today" ? `${analysis.mealName} logged` : `${analysis.mealName} added to your plan`);
   }
 
   const title = tab === "today" ? "Today" : tab === "plan" ? "My Plan" : tab === "log" ? "Log Food" : tab === "grocery" ? "Grocery List" : "Progress";
@@ -174,7 +176,7 @@ export default function Home() {
         </header>
 
         <div className="content">
-          {tab === "today" && <Today meals={meals} consumed={consumed} protein={protein} target={target} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
+          {tab === "today" && <Today meals={meals} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
           {tab === "plan" && <Plan meals={meals} onMeal={markMeal} notify={notify} />}
           {tab === "log" && <Log onPhoto={usePhoto} notify={notify} />}
           {tab === "grocery" && <Grocery checked={grocery} setChecked={setGrocery} notify={notify} />}
@@ -196,33 +198,48 @@ function Brand() {
   return <div className="brand"><div className="brandmark">N</div><div><strong>NutriPath</strong><small>Plan better. Track simply. Eat your way.</small></div></div>;
 }
 
-function Today({ meals, consumed, protein, target, pct, water, onMeal, onWater, onLog }: any) {
+function Today({ meals, consumed, protein, carbs, fat, target, pct, water, onMeal, onWater, onLog }: any) {
+  const [today, setToday] = useState<Date | null>(null);
+  useEffect(() => setToday(new Date()), []);
+  const dates = today ? Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() + index - 3);
+    return date;
+  }) : [];
   return <>
-    <section className="hero-card">
-      <div className="ring" style={{ "--progress": `${pct * 3.6}deg` } as React.CSSProperties}>
-        <div><strong>{target - consumed}</strong><span>kcal left</span></div>
+    <section className="daily-overview">
+      <div className="today-date-strip">
+        {dates.length === 0 && Array.from({ length: 7 }, (_, index) => <div key={index}><span>--</span><strong>--</strong></div>)}
+        {dates.map(date => {
+          const active = today && date.toDateString() === today.toDateString();
+          return <div key={date.toISOString()} className={active ? "active" : ""}><span>{date.toLocaleDateString([], { weekday: "short" }).slice(0, 2)}</span><strong>{date.getDate()}</strong>{active && <i />}</div>;
+        })}
       </div>
-      <div className="hero-copy"><span className="status-dot">On track</span><h2>{consumed.toLocaleString()} <small>of {target.toLocaleString()} kcal</small></h2><p>You’re building a balanced day.</p></div>
-      <div className="macro-row">
-        <ProgressPill label="Protein" value={`${protein} / 130g`} pct={Math.round(protein / 130 * 100)} />
-        <ProgressPill label="Fibre" value="18 / 28g" pct={64} />
-        <ProgressPill label="Water" value={`${(water / 1000).toFixed(1)} / 2.5L`} pct={water / 25} />
+      <div className="calorie-readout">
+        <div><strong>{consumed.toLocaleString()}</strong><span>/ {target.toLocaleString()}</span></div>
+        <small>CALORIES EATEN</small>
+        <p>{Math.max(0, target - consumed).toLocaleString()} kcal left today</p>
+        <i><b style={{ width: `${pct}%` }} /></i>
       </div>
+      <div className="daily-macro-grid">
+        <MacroGoal kind="carbs" label="Carbs" value={carbs} goal={200} />
+        <MacroGoal kind="protein" label="Protein" value={protein} goal={130} />
+        <MacroGoal kind="fat" label="Fat" value={fat} goal={65} />
+      </div>
+      <div className="overview-actions"><button className="scan-meal" onClick={onLog}><span>＋</span><b>Scan or log meal</b></button><button onClick={onWater}><span>♢</span><b>{(water / 1000).toFixed(1)}L water</b></button></div>
     </section>
-
-    <div className="quick-actions"><button className="primary" onClick={onLog}><span>＋</span> Add food</button><button onClick={onWater}><span>♢</span> Add water</button></div>
 
     <section className="section-block">
       <div className="section-heading"><div><p className="eyebrow">YOUR DAY</p><h2>Today’s meals</h2></div><span>{meals.filter((m: Meal) => m.eaten).length} of {meals.length} complete</span></div>
       <div className="meal-list">{meals.map((meal: Meal) => <MealCard key={meal.id} meal={meal} onMeal={onMeal} />)}</div>
     </section>
 
-    <section className="insight-card"><div className="spark">✦</div><div><p className="eyebrow">TODAY’S INSIGHT</p><strong>A protein-rich dinner will bring you close to your daily target.</strong><p>Your planned salmon adds 46g of protein.</p></div></section>
+    <section className="insight-card"><div className="spark">✦</div><div><p className="eyebrow">TODAY’S INSIGHT</p><strong>You have {Math.max(0, 130 - protein)}g of protein remaining.</strong><p>Your planned meals can help close the gap.</p></div></section>
   </>;
 }
 
-function ProgressPill({ label, value, pct }: { label: string; value: string; pct: number }) {
-  return <div className="macro"><div><span>{label}</span><strong>{value}</strong></div><i><b style={{ width: `${Math.min(100, pct)}%` }} /></i></div>;
+function MacroGoal({ kind, label, value, goal }: { kind: string; label: string; value: number; goal: number }) {
+  return <div className={`macro-goal ${kind}`}><span>{label}</span><i><b style={{ width: `${Math.min(100, Math.round(value / goal * 100))}%` }} /></i><strong>{value}<small> / {goal}g</small></strong></div>;
 }
 
 function MealCard({ meal, onMeal }: { meal: Meal; onMeal: (id: number) => void }) {
@@ -292,6 +309,8 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   const [cookingFat, setCookingFat] = useState("Keep current estimate");
   const [sauce, setSauce] = useState("Keep current estimate");
   const [reviewDirty, setReviewDirty] = useState(false);
+  const [fixingResult, setFixingResult] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (type !== "result" || !analysis) return;
@@ -299,6 +318,8 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
     setCookingFat("Keep current estimate");
     setSauce("Keep current estimate");
     setReviewDirty(false);
+    setFixingResult(false);
+    setEditingIndex(null);
   }, [type, analysis]);
 
   function updateReviewItem(index: number, field: "name" | "amount", value: string) {
@@ -308,11 +329,14 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
 
   function removeReviewItem(index: number) {
     setReviewItems(items => items.filter((_, itemIndex) => itemIndex !== index));
+    setEditingIndex(null);
     setReviewDirty(true);
   }
 
   function addReviewItem() {
-    setReviewItems(items => [...items, { name: "", amount: "", calories: 0 }]);
+    setReviewItems(items => [...items, { name: "", amount: "", calories: 0, protein: 0, carbs: 0, fat: 0 }]);
+    setEditingIndex(reviewItems.length);
+    setFixingResult(true);
     setReviewDirty(true);
   }
 
@@ -333,36 +357,56 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
     onAnalyze([], { ingredients, cookingFat, sauce });
   }
 
-  return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && close()}><section className="modal-sheet">
+  return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && close()}><section className={`modal-sheet ${type === "result" ? "result-sheet" : ""}`}>
     <button className="modal-close" onClick={close}>×</button>
     {type === "water" && <><div className="modal-icon">♢</div><p className="eyebrow">WATER</p><h2>Add to today</h2><p className="modal-sub">You’re at 1.5L of your 2.5L goal.</p><div className="water-options"><button onClick={() => addWater(250)}><strong>250</strong><span>ml · Glass</span></button><button onClick={() => addWater(500)}><strong>500</strong><span>ml · Bottle</span></button><button onClick={() => addWater(750)}><strong>750</strong><span>ml · Large bottle</span></button></div><button className="text-button">Enter a custom amount</button></>}
     {type === "log" && <><div className="modal-icon">＋</div><p className="eyebrow">ADD FOOD</p><h2>How would you like to log?</h2><div className="modal-photo-actions"><PhotoPicker label="Take a photo" capture="environment" onPhoto={onPhoto} /><PhotoPicker label="Upload from library" onPhoto={onPhoto} secondary /></div><div className="modal-list"><button onClick={() => { close(); setTab("log"); }}><i>⌕</i><span><strong>Search or scan</strong><small>Food, meals and barcodes</small></span><b>›</b></button><button onClick={() => notify("Previous meals opened")}><i>↻</i><span><strong>Choose a previous meal</strong><small>Quickly log it again</small></span><b>›</b></button></div></>}
     {type === "scan" && <><div className={`scan-frame ${uploadedPhoto ? "has-photo" : ""}`} style={uploadedPhoto ? { backgroundImage: `url(${uploadedPhoto})` } : undefined}>{!uploadedPhoto && <div className="scan-food"><span>Photo</span><span>Upload</span><span>Preview</span></div>}<b>✓ Photo uploaded successfully</b></div><p className="eyebrow">PHOTO ANALYSIS</p><h2>Your meal photo is ready</h2><p className="modal-sub">NutriPath will identify visible foods, estimate portions and nutrition, and ask up to two questions when important details are unclear.</p>{analysisError && <div className="connection-notice"><b>Analysis couldn’t start</b><span>{analysisError}</span></div>}<button className="primary full" disabled={!uploadedData || analyzing} onClick={() => onAnalyze()}>{analyzing ? "Analyzing your meal…" : uploadedData ? "Analyze this photo" : "Preparing photo…"}</button><button className="text-button" onClick={() => next("log")}>Choose a different photo</button></>}
     {type === "clarify" && analysis && <><span className="step-label">{analysis.clarifyingQuestions.length} quick {analysis.clarifyingQuestions.length === 1 ? "question" : "questions"}</span><div className="modal-icon">?</div><h2>A little detail will improve your estimate</h2><p className="modal-sub">NutriPath identified this as <b>{analysis.mealName}</b>, with {analysis.confidence.toLowerCase()} confidence.</p><div className="question-list">{analysis.clarifyingQuestions.map((question: string, index: number) => <label key={question}><span>{question}</span><input value={answers[index] || ""} onChange={event => setAnswers(current => { const updated = [...current]; updated[index] = event.target.value; return updated; })} placeholder="Type your answer, or ‘not sure’" /></label>)}</div>{analysisError && <div className="connection-notice"><b>Couldn’t refine estimate</b><span>{analysisError}</span></div>}<button className="primary full" disabled={analyzing || analysis.clarifyingQuestions.some((_: string, index: number) => !answers[index]?.trim())} onClick={() => onAnalyze(answers)}>{analyzing ? "Refining estimate…" : "Update my estimate"}</button><button className="text-button" onClick={() => next("result")}>Use current estimate</button></>}
     {type === "result" && analysis && <>
-      <div className="confidence"><span>{analysis.confidence} confidence</span><b>Estimated</b></div>
-      <p className="eyebrow">REVIEW MEAL</p>
-      <h2>{analysis.mealName}</h2>
-      <p className="analysis-notes">Check the foods and portions below. Correcting them before saving gives NutriPath a better calorie estimate.</p>
-      <div className="estimate"><div><span>Estimated range</span><strong>{analysis.calories.low}–{analysis.calories.high} <small>kcal</small></strong></div><div><span>Best estimate</span><strong>{analysis.calories.best} <small>kcal</small></strong></div></div>
-      <div className="result-macros"><span><b>{analysis.protein}g</b>Protein</span><span><b>{analysis.carbs}g</b>Carbs</span><span><b>{analysis.fat}g</b>Fat</span><span><b>{analysis.fibre}g</b>Fibre</span></div>
-      {analysis.uncertainties.length > 0 && <div className="uncertainty"><b>✦ Main uncertainty</b><span>{analysis.uncertainties.join(" · ")}</span></div>}
-      <div className="review-heading"><div><strong>Foods and portions</strong><span>Edit anything NutriPath got wrong</span></div><button onClick={addReviewItem}>＋ Add food</button></div>
-      <div className="ingredient-review-list">
-        {reviewItems.map((ingredient, index) => <div className="ingredient-review" key={index}>
-          <label><span>Food</span><input value={ingredient.name} onChange={event => updateReviewItem(index, "name", event.target.value)} placeholder="Food name" /></label>
-          <label><span>Portion</span><input value={ingredient.amount} onChange={event => updateReviewItem(index, "amount", event.target.value)} placeholder="e.g. 120 g or 1 cup" /></label>
-          <div><span>{ingredient.calories > 0 ? `${ingredient.calories} kcal` : "New item"}</span><button aria-label={`Remove ${ingredient.name || "food"}`} onClick={() => removeReviewItem(index)}>Remove</button></div>
-        </div>)}
+      <div className={`result-photo ${uploadedPhoto ? "has-photo" : ""}`} style={uploadedPhoto ? { backgroundImage: `url(${uploadedPhoto})` } : undefined}>
+        <div><span>{analysis.confidence} confidence</span><b>AI estimate</b></div>
       </div>
-      <div className="extras-review">
-        <label><span>Cooking oil or butter</span><select value={cookingFat} onChange={event => updateCookingFat(event.target.value)}><option>Keep current estimate</option><option>None used</option><option>1 teaspoon</option><option>2 teaspoons</option><option>1 tablespoon</option><option>2 or more tablespoons</option><option>Not sure</option></select></label>
-        <label><span>Sauce or dressing</span><select value={sauce} onChange={event => updateSauce(event.target.value)}><option>Keep current estimate</option><option>None used</option><option>Light · about 1 tablespoon</option><option>Medium · about 2 tablespoons</option><option>Heavy · 3 or more tablespoons</option><option>Not sure</option></select></label>
+      <div className="result-content">
+        <div className="result-title-row"><div><p>SCANNED MEAL</p><h2>{analysis.mealName}</h2></div><button aria-label="Save meal for later">♡</button></div>
+        <div className="calorie-summary"><strong>{analysis.calories.best}</strong><span>kcal</span><small>{analysis.calories.low}–{analysis.calories.high} estimated range</small></div>
+        <div className="result-macro-cards">
+          <div className="carbs"><span>Carbs</span><strong>{analysis.carbs}g</strong></div>
+          <div className="protein"><span>Protein</span><strong>{analysis.protein}g</strong></div>
+          <div className="fat"><span>Fat</span><strong>{analysis.fat}g</strong></div>
+        </div>
+        {analysis.uncertainties.length > 0 && <div className="result-uncertainty"><b>Estimate note</b><span>{analysis.uncertainties.join(" · ")}</span></div>}
+        <div className="result-section-heading"><div><h3>Ingredients</h3><span>{reviewItems.length} detected</span></div><button className={fixingResult ? "active" : ""} onClick={() => { setFixingResult(value => !value); setEditingIndex(null); }}>{fixingResult ? "Done" : "Fix result"}</button></div>
+        <div className="result-ingredient-list">
+          {reviewItems.map((ingredient, index) => <div className="result-ingredient" key={index}>
+            <div className="ingredient-summary">
+              <button className="ingredient-main" disabled={!fixingResult} onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
+                <strong>{ingredient.name || "New ingredient"}</strong>
+                <span>{ingredient.amount || "Add a portion"} · {ingredient.calories} kcal</span>
+                <small><i>C {ingredient.carbs}g</i><i>P {ingredient.protein}g</i><i>F {ingredient.fat}g</i></small>
+              </button>
+              {fixingResult && <button className="ingredient-edit-trigger" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>{editingIndex === index ? "−" : "Edit"}</button>}
+            </div>
+            {fixingResult && editingIndex === index && <div className="ingredient-inline-editor">
+              <label><span>Food</span><input value={ingredient.name} onChange={event => updateReviewItem(index, "name", event.target.value)} placeholder="Food name" /></label>
+              <label><span>Portion</span><input value={ingredient.amount} onChange={event => updateReviewItem(index, "amount", event.target.value)} placeholder="120 g, 1 cup, medium" /></label>
+              <button onClick={() => removeReviewItem(index)}>Remove ingredient</button>
+            </div>}
+          </div>)}
+        </div>
+        {fixingResult && <>
+          <button className="add-ingredient" onClick={addReviewItem}>＋ Add new ingredient</button>
+          <details className="hidden-calories"><summary>Oil, butter, sauces <span>Check hidden calories</span></summary><div>
+            <label><span>Cooking oil or butter</span><select value={cookingFat} onChange={event => updateCookingFat(event.target.value)}><option>Keep current estimate</option><option>None used</option><option>1 teaspoon</option><option>2 teaspoons</option><option>1 tablespoon</option><option>2 or more tablespoons</option><option>Not sure</option></select></label>
+            <label><span>Sauce or dressing</span><select value={sauce} onChange={event => updateSauce(event.target.value)}><option>Keep current estimate</option><option>None used</option><option>Light · about 1 tablespoon</option><option>Medium · about 2 tablespoons</option><option>Heavy · 3 or more tablespoons</option><option>Not sure</option></select></label>
+          </div></details>
+        </>}
+        {analysisError && <div className="connection-notice"><b>Couldn’t update estimate</b><span>{analysisError}</span></div>}
+        <div className="result-actions">
+          {reviewDirty ? <button className="update-result" disabled={analyzing || !reviewItems.some(item => item.name.trim())} onClick={recalculateReview}>{analyzing ? "Updating nutrition…" : "Update nutrition"}</button> : <><button className="log-result" onClick={() => onAddAnalysis("today")}>Log meal · {analysis.calories.best} kcal</button><button className="plan-result" onClick={() => onAddAnalysis("plan")}>Add to plan</button></>}
+        </div>
+        <p className="fine-print">Nutrition values are estimates. Verify ingredients, allergens and serving sizes.</p>
       </div>
-      {analysisError && <div className="connection-notice"><b>Couldn’t update estimate</b><span>{analysisError}</span></div>}
-      {reviewDirty && <div className="review-changed"><span>Changes not calculated yet</span><button disabled={analyzing || !reviewItems.some(item => item.name.trim())} onClick={recalculateReview}>{analyzing ? "Recalculating…" : "Recalculate estimate"}</button></div>}
-      {!reviewDirty && <button className="primary full" onClick={onAddAnalysis}>Add to today · {analysis.calories.best} kcal</button>}
-      <p className="fine-print">Nutrition values are estimates. Verify ingredients, allergens and serving sizes.</p>
     </>}
     {type === "profile" && <><div className="profile-head"><div className="avatar big">GG</div><div><h2>Gabriel</h2><p>Weight loss · Metric units</p></div></div><div className="modal-list settings"><button><span><strong>Goals & targets</strong><small>1,850 kcal · 130g protein</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath Plus · Manage or cancel</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger">Log out</button></>}
   </section></div>;
