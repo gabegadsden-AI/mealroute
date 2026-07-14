@@ -8,17 +8,15 @@ type FoodAnalysis = {
   mealName: string;
   calories: { low: number; high: number; best: number };
   protein: number; carbs: number; fat: number; fibre: number;
-  ingredients: { name: string; amount: string; calories: number; protein: number; carbs: number; fat: number }[];
+  ingredients: { name: string; amountGrams: number; calories: number; protein: number; carbs: number; fat: number }[];
   confidence: "High" | "Medium" | "Low";
   uncertainties: string[];
   clarifyingQuestions: string[];
   notes: string;
 };
-type ReviewIngredient = FoodAnalysis["ingredients"][number];
+type ReviewIngredient = Omit<FoodAnalysis["ingredients"][number], "amountGrams"> & { amountGrams: number | "" };
 type MealReview = {
-  ingredients: ReviewIngredient[];
-  cookingFat: string;
-  sauce: string;
+  ingredients: FoodAnalysis["ingredients"];
 };
 
 const initialMeals: Meal[] = [
@@ -113,14 +111,14 @@ export default function Home() {
   }
 
   async function analyzePhoto(answers: string[] = [], review?: MealReview) {
-    if (!uploadedData || analyzing) return;
+    if ((!uploadedData && !review) || analyzing) return;
     setAnalyzing(true);
     setAnalysisError("");
     try {
       const response = await fetch("/api/analyze-food", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: uploadedData, answers, previousAnalysis: analysis, review }),
+        body: JSON.stringify({ ...(review ? {} : { image: uploadedData }), answers, previousAnalysis: analysis, review }),
       });
       const responseText = await response.text();
       let payload: any;
@@ -306,8 +304,6 @@ function Progress({ range, setRange }: { range: string; setRange: (s: string) =>
 function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis }: any) {
   const [answers, setAnswers] = useState<string[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewIngredient[]>([]);
-  const [cookingFat, setCookingFat] = useState("Keep current estimate");
-  const [sauce, setSauce] = useState("Keep current estimate");
   const [reviewDirty, setReviewDirty] = useState(false);
   const [fixingResult, setFixingResult] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -315,15 +311,19 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   useEffect(() => {
     if (type !== "result" || !analysis) return;
     setReviewItems(analysis.ingredients.map((item: ReviewIngredient) => ({ ...item })));
-    setCookingFat("Keep current estimate");
-    setSauce("Keep current estimate");
     setReviewDirty(false);
     setFixingResult(false);
     setEditingIndex(null);
   }, [type, analysis]);
 
-  function updateReviewItem(index: number, field: "name" | "amount", value: string) {
-    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));
+  function updateReviewName(index: number, value: string) {
+    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: value } : item));
+    setReviewDirty(true);
+  }
+
+  function updateReviewGrams(index: number, value: string) {
+    const amountGrams = value === "" ? "" : Math.min(5000, Math.max(1, Math.round(Number(value) || 1)));
+    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, amountGrams } : item));
     setReviewDirty(true);
   }
 
@@ -334,27 +334,17 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   }
 
   function addReviewItem() {
-    setReviewItems(items => [...items, { name: "", amount: "", calories: 0, protein: 0, carbs: 0, fat: 0 }]);
+    setReviewItems(items => [...items, { name: "", amountGrams: "", calories: 0, protein: 0, carbs: 0, fat: 0 }]);
     setEditingIndex(reviewItems.length);
     setFixingResult(true);
     setReviewDirty(true);
   }
 
-  function updateCookingFat(value: string) {
-    setCookingFat(value);
-    setReviewDirty(true);
-  }
-
-  function updateSauce(value: string) {
-    setSauce(value);
-    setReviewDirty(true);
-  }
-
   function recalculateReview() {
     const ingredients = reviewItems
-      .map(item => ({ ...item, name: item.name.trim(), amount: item.amount.trim() }))
-      .filter(item => item.name);
-    onAnalyze([], { ingredients, cookingFat, sauce });
+      .map(item => ({ ...item, name: item.name.trim(), amountGrams: Number(item.amountGrams) }))
+      .filter(item => item.name && item.amountGrams > 0) as FoodAnalysis["ingredients"];
+    onAnalyze([], { ingredients });
   }
 
   return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && close()}><section className={`modal-sheet ${type === "result" ? "result-sheet" : ""}`}>
@@ -375,6 +365,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
           <div className="protein"><span>Protein</span><strong>{analysis.protein}g</strong></div>
           <div className="fat"><span>Fat</span><strong>{analysis.fat}g</strong></div>
         </div>
+        {analysis.notes.startsWith("Nutrition recalculated") && <div className="result-updated">✓ Changes saved and nutrition recalculated</div>}
         {analysis.uncertainties.length > 0 && <div className="result-uncertainty"><b>Estimate note</b><span>{analysis.uncertainties.join(" · ")}</span></div>}
         <div className="result-section-heading"><div><h3>Ingredients</h3><span>{reviewItems.length} detected</span></div><button className={fixingResult ? "active" : ""} onClick={() => { setFixingResult(value => !value); setEditingIndex(null); }}>{fixingResult ? "Done" : "Fix result"}</button></div>
         <div className="result-ingredient-list">
@@ -382,28 +373,25 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
             <div className="ingredient-summary">
               <button className="ingredient-main" disabled={!fixingResult} onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
                 <strong>{ingredient.name || "New ingredient"}</strong>
-                <span>{ingredient.amount || "Add a portion"} · {ingredient.calories} kcal</span>
+                <span>{ingredient.amountGrams ? `${ingredient.amountGrams} g` : "Add grams"} · {ingredient.calories} kcal</span>
                 <small><i>C {ingredient.carbs}g</i><i>P {ingredient.protein}g</i><i>F {ingredient.fat}g</i></small>
               </button>
               {fixingResult && <button className="ingredient-edit-trigger" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>{editingIndex === index ? "−" : "Edit"}</button>}
             </div>
             {fixingResult && editingIndex === index && <div className="ingredient-inline-editor">
-              <label><span>Food</span><input value={ingredient.name} onChange={event => updateReviewItem(index, "name", event.target.value)} placeholder="Food name" /></label>
-              <label><span>Portion</span><input value={ingredient.amount} onChange={event => updateReviewItem(index, "amount", event.target.value)} placeholder="120 g, 1 cup, medium" /></label>
+              <label><span>Food</span><input value={ingredient.name} onChange={event => updateReviewName(index, event.target.value)} placeholder="Food name" /></label>
+              <label><span>Grams</span><input type="number" inputMode="numeric" min="1" max="5000" step="1" value={ingredient.amountGrams} onChange={event => updateReviewGrams(index, event.target.value)} placeholder="120" /><small className="gram-unit">g</small></label>
               <button onClick={() => removeReviewItem(index)}>Remove ingredient</button>
             </div>}
           </div>)}
         </div>
         {fixingResult && <>
           <button className="add-ingredient" onClick={addReviewItem}>＋ Add new ingredient</button>
-          <details className="hidden-calories"><summary>Oil, butter, sauces <span>Check hidden calories</span></summary><div>
-            <label><span>Cooking oil or butter</span><select value={cookingFat} onChange={event => updateCookingFat(event.target.value)}><option>Keep current estimate</option><option>None used</option><option>1 teaspoon</option><option>2 teaspoons</option><option>1 tablespoon</option><option>2 or more tablespoons</option><option>Not sure</option></select></label>
-            <label><span>Sauce or dressing</span><select value={sauce} onChange={event => updateSauce(event.target.value)}><option>Keep current estimate</option><option>None used</option><option>Light · about 1 tablespoon</option><option>Medium · about 2 tablespoons</option><option>Heavy · 3 or more tablespoons</option><option>Not sure</option></select></label>
-          </div></details>
+          <details className="hidden-calories"><summary>Oil, butter, sauces <span>Add exact grams</span></summary><p>If one is missing, select “Add new ingredient,” enter its name, then enter the grams used. NutriPath will calculate it with the rest of the confirmed meal.</p></details>
         </>}
         {analysisError && <div className="connection-notice"><b>Couldn’t update estimate</b><span>{analysisError}</span></div>}
         <div className="result-actions">
-          {reviewDirty ? <button className="update-result" disabled={analyzing || !reviewItems.some(item => item.name.trim())} onClick={recalculateReview}>{analyzing ? "Updating nutrition…" : "Update nutrition"}</button> : <><button className="log-result" onClick={() => onAddAnalysis("today")}>Log meal · {analysis.calories.best} kcal</button><button className="plan-result" onClick={() => onAddAnalysis("plan")}>Add to plan</button></>}
+          {reviewDirty ? <button className="update-result" disabled={analyzing || reviewItems.length === 0 || reviewItems.some(item => !item.name.trim() || Number(item.amountGrams) <= 0)} onClick={recalculateReview}>{analyzing ? "Recalculating confirmed foods…" : "Update nutrition"}</button> : <><button className="log-result" onClick={() => onAddAnalysis("today")}>Log meal · {analysis.calories.best} kcal</button><button className="plan-result" onClick={() => onAddAnalysis("plan")}>Add to plan</button></>}
         </div>
         <p className="fine-print">Nutrition values are estimates. Verify ingredients, allergens and serving sizes.</p>
       </div>
