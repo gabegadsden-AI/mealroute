@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
 type Meal = { id: number; type: string; name: string; calories: number; protein: number; time: string; eaten: boolean; locked?: boolean; color: string };
@@ -13,6 +13,12 @@ type FoodAnalysis = {
   uncertainties: string[];
   clarifyingQuestions: string[];
   notes: string;
+};
+type ReviewIngredient = FoodAnalysis["ingredients"][number];
+type MealReview = {
+  ingredients: ReviewIngredient[];
+  cookingFat: string;
+  sauce: string;
 };
 
 const initialMeals: Meal[] = [
@@ -78,26 +84,33 @@ export default function Home() {
       return URL.createObjectURL(file);
     });
     setModal("scan");
+    const sourceUrl = URL.createObjectURL(file);
     try {
-      const source = await createImageBitmap(file);
+      const source = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("The source image could not be decoded."));
+        image.src = sourceUrl;
+      });
       const maxDimension = 1400;
-      const scale = Math.min(1, maxDimension / Math.max(source.width, source.height));
-      const width = Math.max(1, Math.round(source.width * scale));
-      const height = Math.max(1, Math.round(source.height * scale));
+      const scale = Math.min(1, maxDimension / Math.max(source.naturalWidth, source.naturalHeight));
+      const width = Math.max(1, Math.round(source.naturalWidth * scale));
+      const height = Math.max(1, Math.round(source.naturalHeight * scale));
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       const context = canvas.getContext("2d");
       if (!context) throw new Error("Photo processing is unavailable in this browser.");
       context.drawImage(source, 0, 0, width, height);
-      source.close();
       setUploadedData(canvas.toDataURL("image/jpeg", 0.78));
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "This photo could not be prepared. Please choose another image.");
+    } finally {
+      URL.revokeObjectURL(sourceUrl);
     }
   }
 
-  async function analyzePhoto(answers: string[] = []) {
+  async function analyzePhoto(answers: string[] = [], review?: MealReview) {
     if (!uploadedData || analyzing) return;
     setAnalyzing(true);
     setAnalysisError("");
@@ -105,7 +118,7 @@ export default function Home() {
       const response = await fetch("/api/analyze-food", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: uploadedData, answers, previousAnalysis: analysis }),
+        body: JSON.stringify({ image: uploadedData, answers, previousAnalysis: analysis, review }),
       });
       const responseText = await response.text();
       let payload: any;
@@ -118,10 +131,10 @@ export default function Home() {
       }
       if (!response.ok) throw new Error(payload.error || "The photo could not be analyzed.");
       setAnalysis(payload.analysis);
-      setModal(answers.length === 0 && payload.analysis.clarifyingQuestions.length > 0 ? "clarify" : "result");
+      setModal(!review && answers.length === 0 && payload.analysis.clarifyingQuestions.length > 0 ? "clarify" : "result");
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "The photo could not be analyzed.");
-      setModal("scan");
+      setModal(review ? "result" : answers.length > 0 ? "clarify" : "scan");
     } finally {
       setAnalyzing(false);
     }
@@ -275,13 +288,82 @@ function Progress({ range, setRange }: { range: string; setRange: (s: string) =>
 
 function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis }: any) {
   const [answers, setAnswers] = useState<string[]>([]);
+  const [reviewItems, setReviewItems] = useState<ReviewIngredient[]>([]);
+  const [cookingFat, setCookingFat] = useState("Keep current estimate");
+  const [sauce, setSauce] = useState("Keep current estimate");
+  const [reviewDirty, setReviewDirty] = useState(false);
+
+  useEffect(() => {
+    if (type !== "result" || !analysis) return;
+    setReviewItems(analysis.ingredients.map((item: ReviewIngredient) => ({ ...item })));
+    setCookingFat("Keep current estimate");
+    setSauce("Keep current estimate");
+    setReviewDirty(false);
+  }, [type, analysis]);
+
+  function updateReviewItem(index: number, field: "name" | "amount", value: string) {
+    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));
+    setReviewDirty(true);
+  }
+
+  function removeReviewItem(index: number) {
+    setReviewItems(items => items.filter((_, itemIndex) => itemIndex !== index));
+    setReviewDirty(true);
+  }
+
+  function addReviewItem() {
+    setReviewItems(items => [...items, { name: "", amount: "", calories: 0 }]);
+    setReviewDirty(true);
+  }
+
+  function updateCookingFat(value: string) {
+    setCookingFat(value);
+    setReviewDirty(true);
+  }
+
+  function updateSauce(value: string) {
+    setSauce(value);
+    setReviewDirty(true);
+  }
+
+  function recalculateReview() {
+    const ingredients = reviewItems
+      .map(item => ({ ...item, name: item.name.trim(), amount: item.amount.trim() }))
+      .filter(item => item.name);
+    onAnalyze([], { ingredients, cookingFat, sauce });
+  }
+
   return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && close()}><section className="modal-sheet">
     <button className="modal-close" onClick={close}>×</button>
     {type === "water" && <><div className="modal-icon">♢</div><p className="eyebrow">WATER</p><h2>Add to today</h2><p className="modal-sub">You’re at 1.5L of your 2.5L goal.</p><div className="water-options"><button onClick={() => addWater(250)}><strong>250</strong><span>ml · Glass</span></button><button onClick={() => addWater(500)}><strong>500</strong><span>ml · Bottle</span></button><button onClick={() => addWater(750)}><strong>750</strong><span>ml · Large bottle</span></button></div><button className="text-button">Enter a custom amount</button></>}
     {type === "log" && <><div className="modal-icon">＋</div><p className="eyebrow">ADD FOOD</p><h2>How would you like to log?</h2><div className="modal-photo-actions"><PhotoPicker label="Take a photo" capture="environment" onPhoto={onPhoto} /><PhotoPicker label="Upload from library" onPhoto={onPhoto} secondary /></div><div className="modal-list"><button onClick={() => { close(); setTab("log"); }}><i>⌕</i><span><strong>Search or scan</strong><small>Food, meals and barcodes</small></span><b>›</b></button><button onClick={() => notify("Previous meals opened")}><i>↻</i><span><strong>Choose a previous meal</strong><small>Quickly log it again</small></span><b>›</b></button></div></>}
     {type === "scan" && <><div className={`scan-frame ${uploadedPhoto ? "has-photo" : ""}`} style={uploadedPhoto ? { backgroundImage: `url(${uploadedPhoto})` } : undefined}>{!uploadedPhoto && <div className="scan-food"><span>Photo</span><span>Upload</span><span>Preview</span></div>}<b>✓ Photo uploaded successfully</b></div><p className="eyebrow">PHOTO ANALYSIS</p><h2>Your meal photo is ready</h2><p className="modal-sub">NutriPath will identify visible foods, estimate portions and nutrition, and ask up to two questions when important details are unclear.</p>{analysisError && <div className="connection-notice"><b>Analysis couldn’t start</b><span>{analysisError}</span></div>}<button className="primary full" disabled={!uploadedData || analyzing} onClick={() => onAnalyze()}>{analyzing ? "Analyzing your meal…" : uploadedData ? "Analyze this photo" : "Preparing photo…"}</button><button className="text-button" onClick={() => next("log")}>Choose a different photo</button></>}
     {type === "clarify" && analysis && <><span className="step-label">{analysis.clarifyingQuestions.length} quick {analysis.clarifyingQuestions.length === 1 ? "question" : "questions"}</span><div className="modal-icon">?</div><h2>A little detail will improve your estimate</h2><p className="modal-sub">NutriPath identified this as <b>{analysis.mealName}</b>, with {analysis.confidence.toLowerCase()} confidence.</p><div className="question-list">{analysis.clarifyingQuestions.map((question: string, index: number) => <label key={question}><span>{question}</span><input value={answers[index] || ""} onChange={event => setAnswers(current => { const updated = [...current]; updated[index] = event.target.value; return updated; })} placeholder="Type your answer, or ‘not sure’" /></label>)}</div>{analysisError && <div className="connection-notice"><b>Couldn’t refine estimate</b><span>{analysisError}</span></div>}<button className="primary full" disabled={analyzing || analysis.clarifyingQuestions.some((_: string, index: number) => !answers[index]?.trim())} onClick={() => onAnalyze(answers)}>{analyzing ? "Refining estimate…" : "Update my estimate"}</button><button className="text-button" onClick={() => next("result")}>Use current estimate</button></>}
-    {type === "result" && analysis && <><div className="confidence"><span>{analysis.confidence} confidence</span><b>Estimated</b></div><p className="eyebrow">REVIEW ESTIMATE</p><h2>{analysis.mealName}</h2><p className="analysis-notes">{analysis.notes}</p><div className="estimate"><div><span>Estimated range</span><strong>{analysis.calories.low}–{analysis.calories.high} <small>kcal</small></strong></div><div><span>Best estimate</span><strong>{analysis.calories.best} <small>kcal</small></strong></div></div><div className="result-macros"><span><b>{analysis.protein}g</b>Protein</span><span><b>{analysis.carbs}g</b>Carbs</span><span><b>{analysis.fat}g</b>Fat</span><span><b>{analysis.fibre}g</b>Fibre</span></div>{analysis.uncertainties.length > 0 && <div className="uncertainty"><b>✦ Main uncertainty</b><span>{analysis.uncertainties.join(" · ")}</span></div>}{analysis.ingredients.map((ingredient: FoodAnalysis["ingredients"][number]) => <button className="ingredient-edit" key={`${ingredient.name}-${ingredient.amount}`}>{ingredient.name} · {ingredient.amount} <span>{ingredient.calories} kcal · Edit ›</span></button>)}<button className="primary full" onClick={onAddAnalysis}>Add to today · {analysis.calories.best} kcal</button><p className="fine-print">Nutrition values are AI estimates. Verify ingredients, allergens and serving sizes.</p></>}
+    {type === "result" && analysis && <>
+      <div className="confidence"><span>{analysis.confidence} confidence</span><b>Estimated</b></div>
+      <p className="eyebrow">REVIEW MEAL</p>
+      <h2>{analysis.mealName}</h2>
+      <p className="analysis-notes">Check the foods and portions below. Correcting them before saving gives NutriPath a better calorie estimate.</p>
+      <div className="estimate"><div><span>Estimated range</span><strong>{analysis.calories.low}–{analysis.calories.high} <small>kcal</small></strong></div><div><span>Best estimate</span><strong>{analysis.calories.best} <small>kcal</small></strong></div></div>
+      <div className="result-macros"><span><b>{analysis.protein}g</b>Protein</span><span><b>{analysis.carbs}g</b>Carbs</span><span><b>{analysis.fat}g</b>Fat</span><span><b>{analysis.fibre}g</b>Fibre</span></div>
+      {analysis.uncertainties.length > 0 && <div className="uncertainty"><b>✦ Main uncertainty</b><span>{analysis.uncertainties.join(" · ")}</span></div>}
+      <div className="review-heading"><div><strong>Foods and portions</strong><span>Edit anything NutriPath got wrong</span></div><button onClick={addReviewItem}>＋ Add food</button></div>
+      <div className="ingredient-review-list">
+        {reviewItems.map((ingredient, index) => <div className="ingredient-review" key={index}>
+          <label><span>Food</span><input value={ingredient.name} onChange={event => updateReviewItem(index, "name", event.target.value)} placeholder="Food name" /></label>
+          <label><span>Portion</span><input value={ingredient.amount} onChange={event => updateReviewItem(index, "amount", event.target.value)} placeholder="e.g. 120 g or 1 cup" /></label>
+          <div><span>{ingredient.calories > 0 ? `${ingredient.calories} kcal` : "New item"}</span><button aria-label={`Remove ${ingredient.name || "food"}`} onClick={() => removeReviewItem(index)}>Remove</button></div>
+        </div>)}
+      </div>
+      <div className="extras-review">
+        <label><span>Cooking oil or butter</span><select value={cookingFat} onChange={event => updateCookingFat(event.target.value)}><option>Keep current estimate</option><option>None used</option><option>1 teaspoon</option><option>2 teaspoons</option><option>1 tablespoon</option><option>2 or more tablespoons</option><option>Not sure</option></select></label>
+        <label><span>Sauce or dressing</span><select value={sauce} onChange={event => updateSauce(event.target.value)}><option>Keep current estimate</option><option>None used</option><option>Light · about 1 tablespoon</option><option>Medium · about 2 tablespoons</option><option>Heavy · 3 or more tablespoons</option><option>Not sure</option></select></label>
+      </div>
+      {analysisError && <div className="connection-notice"><b>Couldn’t update estimate</b><span>{analysisError}</span></div>}
+      {reviewDirty && <div className="review-changed"><span>Changes not calculated yet</span><button disabled={analyzing || !reviewItems.some(item => item.name.trim())} onClick={recalculateReview}>{analyzing ? "Recalculating…" : "Recalculate estimate"}</button></div>}
+      {!reviewDirty && <button className="primary full" onClick={onAddAnalysis}>Add to today · {analysis.calories.best} kcal</button>}
+      <p className="fine-print">Nutrition values are estimates. Verify ingredients, allergens and serving sizes.</p>
+    </>}
     {type === "profile" && <><div className="profile-head"><div className="avatar big">GG</div><div><h2>Gabriel</h2><p>Weight loss · Metric units</p></div></div><div className="modal-list settings"><button><span><strong>Goals & targets</strong><small>1,850 kcal · 130g protein</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath Plus · Manage or cancel</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger">Log out</button></>}
   </section></div>;
 }
