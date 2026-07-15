@@ -118,7 +118,7 @@ export default function Home() {
       const response = await fetch("/api/analyze-food", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...(review ? {} : { image: uploadedData }), answers, previousAnalysis: analysis, review }),
+        body: JSON.stringify({ image: uploadedData, mode: review ? "review" : "analyze", answers, previousAnalysis: analysis, review }),
       });
       const responseText = await response.text();
       let payload: any;
