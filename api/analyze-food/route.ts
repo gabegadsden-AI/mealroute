@@ -1,11 +1,14 @@
 type AnalyzeRequest = {
   image?: string;
+  mode?: "analyze" | "review";
   answers?: string[];
-  previousAnalysis?: unknown;
+  previousAnalysis?: {
+    mealName?: string;
+    confidence?: "High" | "Medium" | "Low";
+    notes?: string;
+  };
   review?: {
-    ingredients?: { name?: string; amount?: string; calories?: number }[];
-    cookingFat?: string;
-    sauce?: string;
+    ingredients?: { name?: string; amountGrams?: number; calories?: number; protein?: number; carbs?: number; fat?: number }[];
   };
 };
 
@@ -26,9 +29,11 @@ const schema = {
     ingredients: {
       type: "array",
       items: {
-        type: "object", additionalProperties: false, required: ["name", "amount", "calories", "protein", "carbs", "fat"],
+        type: "object", additionalProperties: false, required: ["name", "amountGrams", "calories", "protein", "carbs", "fat"],
         properties: {
-          name: { type: "string" }, amount: { type: "string" }, calories: { type: "integer" },
+          name: { type: "string" },
+          amountGrams: { type: "integer", minimum: 1, maximum: 5000, description: "A single whole-number gram amount. Never include words such as about or approximately." },
+          calories: { type: "integer" },
           protein: { type: "integer", description: "Estimated grams for this ingredient." },
           carbs: { type: "integer", description: "Estimated grams for this ingredient." },
           fat: { type: "integer", description: "Estimated grams for this ingredient." },
@@ -45,10 +50,12 @@ const schema = {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as AnalyzeRequest;
-    if (!body.image?.startsWith("data:image/")) {
+    const submittedReviewIngredients = Array.isArray(body.review?.ingredients) ? body.review.ingredients : [];
+    const isReview = body.mode === "review" || submittedReviewIngredients.length > 0;
+    if (!isReview && !body.image?.startsWith("data:image/")) {
       return Response.json({ error: "A valid meal image is required." }, { status: 400 });
     }
-    if (body.image.length > 10_000_000) {
+    if (!isReview && body.image!.length > 10_000_000) {
       return Response.json({ error: "This photo is too large. Please choose an image under 7 MB." }, { status: 413 });
     }
 
@@ -58,25 +65,23 @@ export async function POST(request: Request) {
       return Response.json({ error: "Live AI analysis has not been securely connected yet." }, { status: 503 });
     }
 
-    const isReview = Array.isArray(body.review?.ingredients);
     const isRefinement = !isReview && Array.isArray(body.answers) && body.answers.some(Boolean);
     const reviewedIngredients = isReview
-      ? body.review!.ingredients!.slice(0, 20).map(item => ({
+      ? submittedReviewIngredients.slice(0, 20).map(item => ({
           name: String(item.name || "").slice(0, 100),
-          amount: String(item.amount || "").slice(0, 100),
+          amountGrams: Math.min(5000, Math.max(1, Math.round(Number(item.amountGrams) || 1))),
         })).filter(item => item.name)
       : [];
-    const context = isReview
-      ? `\nThis is the final user review. Previous analysis: ${JSON.stringify(body.previousAnalysis)}
-User-confirmed foods and portions: ${JSON.stringify(reviewedIngredients)}
-Cooking oil or butter: ${String(body.review?.cookingFat || "Keep current estimate").slice(0, 100)}
-Sauce or dressing: ${String(body.review?.sauce || "Keep current estimate").slice(0, 100)}
-Treat the reviewed food names and portions as authoritative. Recalculate every ingredient and all nutrition values from scratch. Include confirmed oil, butter, sauce, or dressing as separate ingredients. If the user selected "Keep current estimate", retain the relevant assumption from the previous analysis. If the user selected "Not sure", widen the calorie range instead of adding a large hidden serving. Return no clarifying questions.`
-      : isRefinement
-        ? `\nThis is a refinement. Previous analysis: ${JSON.stringify(body.previousAnalysis)}\nUser answers: ${body.answers!.map((answer, index) => `${index + 1}. ${String(answer).slice(0, 300)}`).join(" ")}\nUse the answers as authoritative details. Recalculate ingredient calories and totals, then return no further questions unless absolutely essential.`
-        : "";
+    if (isReview && reviewedIngredients.length === 0) {
+      return Response.json({ error: "At least one confirmed ingredient and gram amount is required." }, { status: 400 });
+    }
 
-    const prompt = `Analyze this meal photograph for a calorie-tracking app. Identify only foods reasonably supported by the image; never substitute a canned meal or invent an ingredient as certain. Estimate each visible portion conservatively using familiar metric or household units, then calculate calories, protein, carbohydrates, and fat for every ingredient and for the complete meal. Do not assume restaurant-sized portions. Do not add oil, butter, dressing, or sauce as consumed unless it is visible or confirmed by the user; when it is uncertain, mention it and ask about it instead. The best calorie estimate must closely equal the sum of ingredient calories and must fall inside the low-to-high range. Total protein, carbs, and fat should closely equal the sums of the ingredient-level macros. Use a wider range when portion size is visually uncertain. Ask zero to two short clarifying questions only when an answer could materially improve the estimate, prioritizing portion size and hidden cooking fats or sauces. Nutrition values must be presented as estimates, not facts. If the image is not food or is too unclear, say so in mealName and notes, use Low confidence, and do not fabricate a meal.${context}`;
+    const refinementContext = isRefinement
+      ? `\nThis is a refinement. Previous analysis: ${JSON.stringify(body.previousAnalysis)}\nUser answers: ${body.answers!.map((answer, index) => `${index + 1}. ${String(answer).slice(0, 300)}`).join(" ")}\nUse the answers as authoritative details. Recalculate ingredient calories and totals, then return no further questions unless absolutely essential.`
+      : "";
+    const prompt = isReview
+      ? `Recalculate nutrition from this locked, user-confirmed ingredient list: ${JSON.stringify(reviewedIngredients)}. This is a text-only calculation; do not analyze or reinterpret the meal photo. Return exactly the same number of ingredients, in the same order, with the exact same names and amountGrams values. Never add, remove, rename, replace, split, or combine a food. Calculate calories, protein, carbohydrates, and fat for each confirmed gram amount using standard nutrition data. Set mealName to ${JSON.stringify(body.previousAnalysis?.mealName || "Confirmed meal")}. Make the meal totals equal the ingredient sums, return no uncertainties and no clarifying questions, and state in notes that nutrition was recalculated from the user's confirmed foods and grams.`
+      : `Analyze this meal photograph for a calorie-tracking app. Identify only foods reasonably supported by the image; never substitute a canned meal or invent an ingredient as certain. Estimate each visible portion conservatively and return one whole-number amountGrams value for every ingredient. Display a single gram number such as 120, never a range and never words such as "about" or "approximately". Calculate calories, protein, carbohydrates, and fat for every ingredient and for the complete meal. Do not assume restaurant-sized portions. Do not add oil, butter, dressing, or sauce as consumed unless it is visible or confirmed by the user; when it is uncertain, mention it and ask about it instead. The best calorie estimate must closely equal the sum of ingredient calories and must fall inside the low-to-high range. Total protein, carbs, and fat should closely equal the sums of the ingredient-level macros. Use a wider calorie range when portion size is visually uncertain. Ask zero to two short clarifying questions only when an answer could materially improve the estimate, prioritizing portion size and hidden cooking fats or sauces. Nutrition values and image-derived gram amounts must be presented as estimates, not facts. If the image is not food or is too unclear, say so in mealName and notes, use Low confidence, and do not fabricate a meal.${refinementContext}`;
 
     const apiResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -87,10 +92,9 @@ Treat the reviewed food names and portions as authoritative. Recalculate every i
         max_output_tokens: 1800,
         input: [{
           role: "user",
-          content: [
-            { type: "input_text", text: prompt },
-            { type: "input_image", image_url: body.image, detail: "high" },
-          ],
+          content: isReview
+            ? [{ type: "input_text", text: prompt }]
+            : [{ type: "input_text", text: prompt }, { type: "input_image", image_url: body.image, detail: "high" }],
         }],
         text: { format: { type: "json_schema", name: "food_analysis", strict: true, schema } },
       }),
@@ -114,8 +118,31 @@ Treat the reviewed food names and portions as authoritative. Recalculate every i
       protein: number;
       carbs: number;
       fat: number;
-      ingredients: { calories: number; protein: number; carbs: number; fat: number }[];
+      mealName: string;
+      confidence: "High" | "Medium" | "Low";
+      uncertainties: string[];
+      clarifyingQuestions: string[];
+      notes: string;
+      ingredients: { name: string; amountGrams: number; calories: number; protein: number; carbs: number; fat: number }[];
     };
+    if (isReview) {
+      analysis.mealName = body.previousAnalysis?.mealName || analysis.mealName;
+      analysis.ingredients = reviewedIngredients.map((confirmed, index) => {
+        const calculated = analysis.ingredients[index] || { calories: 0, protein: 0, carbs: 0, fat: 0 };
+        return {
+          name: confirmed.name,
+          amountGrams: confirmed.amountGrams,
+          calories: Math.max(0, Math.round(calculated.calories)),
+          protein: Math.max(0, Math.round(calculated.protein)),
+          carbs: Math.max(0, Math.round(calculated.carbs)),
+          fat: Math.max(0, Math.round(calculated.fat)),
+        };
+      });
+      analysis.confidence = body.previousAnalysis?.confidence || analysis.confidence;
+      analysis.uncertainties = [];
+      analysis.clarifyingQuestions = [];
+      analysis.notes = "Nutrition recalculated from your confirmed foods and exact gram amounts.";
+    }
     const ingredientTotal = analysis.ingredients.reduce((sum, item) => sum + Math.max(0, Math.round(item.calories)), 0);
     const best = ingredientTotal > 0 ? ingredientTotal : Math.max(0, Math.round(analysis.calories.best));
     const originalLow = Math.max(0, Math.round(analysis.calories.low));
