@@ -19,6 +19,62 @@ type MealReview = {
   ingredients: FoodAnalysis["ingredients"];
 };
 
+function numericValue(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.round(number)) : 0;
+}
+
+function gramValue(ingredient: any) {
+  const direct = numericValue(ingredient?.amountGrams);
+  if (direct > 0) return direct;
+  const legacyMatch = String(ingredient?.amount || "").match(/\d+(?:\.\d+)?/);
+  return legacyMatch ? Math.max(1, Math.round(Number(legacyMatch[0]))) : 0;
+}
+
+function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
+  const returnedIngredients = Array.isArray(raw?.ingredients) ? raw.ingredients : [];
+  const ingredients = review
+    ? review.ingredients.map((confirmed, index) => {
+        const nameMatch = returnedIngredients.find((item: any) => String(item?.name || "").trim().toLowerCase() === confirmed.name.trim().toLowerCase());
+        const calculated = nameMatch || returnedIngredients[index] || {};
+        return {
+          name: confirmed.name,
+          amountGrams: confirmed.amountGrams,
+          calories: numericValue(calculated.calories),
+          protein: numericValue(calculated.protein),
+          carbs: numericValue(calculated.carbs),
+          fat: numericValue(calculated.fat),
+        };
+      })
+    : returnedIngredients.map((ingredient: any) => ({
+        name: String(ingredient?.name || "Food"),
+        amountGrams: gramValue(ingredient),
+        calories: numericValue(ingredient?.calories),
+        protein: numericValue(ingredient?.protein),
+        carbs: numericValue(ingredient?.carbs),
+        fat: numericValue(ingredient?.fat),
+      }));
+
+  return {
+    ...raw,
+    mealName: String(raw?.mealName || "Scanned meal"),
+    calories: {
+      low: numericValue(raw?.calories?.low),
+      high: numericValue(raw?.calories?.high),
+      best: numericValue(raw?.calories?.best),
+    },
+    protein: numericValue(raw?.protein),
+    carbs: numericValue(raw?.carbs),
+    fat: numericValue(raw?.fat),
+    fibre: numericValue(raw?.fibre),
+    ingredients,
+    confidence: ["High", "Medium", "Low"].includes(raw?.confidence) ? raw.confidence : "Low",
+    uncertainties: Array.isArray(raw?.uncertainties) ? raw.uncertainties : [],
+    clarifyingQuestions: Array.isArray(raw?.clarifyingQuestions) ? raw.clarifyingQuestions : [],
+    notes: String(raw?.notes || ""),
+  };
+}
+
 const initialMeals: Meal[] = [
   { id: 1, type: "Breakfast", name: "Greek yoghurt fruit bowl", calories: 380, protein: 26, carbs: 48, fat: 10, time: "8:00 AM", eaten: true, color: "berry" },
   { id: 2, type: "Lunch", name: "Turkey avocado wrap", calories: 510, protein: 38, carbs: 44, fat: 20, time: "12:30 PM", eaten: true, locked: true, color: "wrap" },
@@ -130,8 +186,9 @@ export default function Home() {
           : `The analysis service returned an unexpected response (${response.status}). Please try again.`);
       }
       if (!response.ok) throw new Error(payload.error || "The photo could not be analyzed.");
-      setAnalysis(payload.analysis);
-      setModal(!review && answers.length === 0 && payload.analysis.clarifyingQuestions.length > 0 ? "clarify" : "result");
+      const nextAnalysis = normalizeAnalysis(payload.analysis, review);
+      setAnalysis(nextAnalysis);
+      setModal(!review && answers.length === 0 && nextAnalysis.clarifyingQuestions.length > 0 ? "clarify" : "result");
     } catch (error) {
       setAnalysisError(error instanceof Error ? error.message : "The photo could not be analyzed.");
       setModal(review ? "result" : answers.length > 0 ? "clarify" : "scan");
