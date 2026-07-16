@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
 type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string };
@@ -364,10 +364,27 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   const [reviewDirty, setReviewDirty] = useState(false);
   const [fixingResult, setFixingResult] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [confirmedUpdate, setConfirmedUpdate] = useState(false);
+  const confirmedReviewRef = useRef<FoodAnalysis["ingredients"] | null>(null);
 
   useEffect(() => {
     if (type !== "result" || !analysis) return;
-    setReviewItems(analysis.ingredients.map((item: ReviewIngredient) => ({ ...item })));
+    const confirmed = confirmedReviewRef.current;
+    if (confirmed) {
+      setReviewItems(confirmed.map((ingredient, index) => {
+        const recalculated = analysis.ingredients[index] || ingredient;
+        return {
+          ...recalculated,
+          name: ingredient.name,
+          amountGrams: ingredient.amountGrams,
+        };
+      }));
+      confirmedReviewRef.current = null;
+      setConfirmedUpdate(true);
+    } else {
+      setReviewItems(analysis.ingredients.map((item: ReviewIngredient) => ({ ...item })));
+      setConfirmedUpdate(false);
+    }
     setReviewDirty(false);
     setFixingResult(false);
     setEditingIndex(null);
@@ -376,18 +393,21 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   function updateReviewName(index: number, value: string) {
     setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: value } : item));
     setReviewDirty(true);
+    setConfirmedUpdate(false);
   }
 
   function updateReviewGrams(index: number, value: string) {
     const amountGrams = value === "" ? "" : Math.min(5000, Math.max(1, Math.round(Number(value) || 1)));
     setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, amountGrams } : item));
     setReviewDirty(true);
+    setConfirmedUpdate(false);
   }
 
   function removeReviewItem(index: number) {
     setReviewItems(items => items.filter((_, itemIndex) => itemIndex !== index));
     setEditingIndex(null);
     setReviewDirty(true);
+    setConfirmedUpdate(false);
   }
 
   function addReviewItem() {
@@ -395,12 +415,15 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
     setEditingIndex(reviewItems.length);
     setFixingResult(true);
     setReviewDirty(true);
+    setConfirmedUpdate(false);
   }
 
   function recalculateReview() {
     const ingredients = reviewItems
       .map(item => ({ ...item, name: item.name.trim(), amountGrams: Number(item.amountGrams) }))
       .filter(item => item.name && item.amountGrams > 0) as FoodAnalysis["ingredients"];
+    confirmedReviewRef.current = ingredients.map(ingredient => ({ ...ingredient }));
+    setReviewItems(ingredients.map(ingredient => ({ ...ingredient })));
     onAnalyze([], { ingredients });
   }
 
@@ -422,7 +445,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
           <div className="protein"><span>Protein</span><strong>{analysis.protein}g</strong></div>
           <div className="fat"><span>Fat</span><strong>{analysis.fat}g</strong></div>
         </div>
-        {analysis.notes.startsWith("Nutrition recalculated") && <div className="result-updated">✓ Changes saved and nutrition recalculated</div>}
+        {confirmedUpdate && <div className="result-updated">✓ Changes saved — confirmed grams retained</div>}
         {analysis.uncertainties.length > 0 && <div className="result-uncertainty"><b>Estimate note</b><span>{analysis.uncertainties.join(" · ")}</span></div>}
         <div className="result-section-heading"><div><h3>Ingredients</h3><span>{reviewItems.length} detected</span></div><button className={fixingResult ? "active" : ""} onClick={() => { setFixingResult(value => !value); setEditingIndex(null); }}>{fixingResult ? "Done" : "Fix result"}</button></div>
         <div className="result-ingredient-list">
