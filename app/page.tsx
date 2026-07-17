@@ -447,7 +447,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
     {type === "clarify" && analysis && <><span className="step-label">{analysis.clarifyingQuestions.length} quick {analysis.clarifyingQuestions.length === 1 ? "question" : "questions"}</span><div className="modal-icon">?</div><h2>A little detail will improve your estimate</h2><p className="modal-sub">NutriPath identified this as <b>{analysis.mealName}</b>, with {analysis.confidence.toLowerCase()} confidence.</p><div className="question-list">{analysis.clarifyingQuestions.map((question: string, index: number) => <label key={question}><span>{question}</span><input value={answers[index] || ""} onChange={event => setAnswers(current => { const updated = [...current]; updated[index] = event.target.value; return updated; })} placeholder="Type your answer, or ‘not sure’" /></label>)}</div>{analysisError && <div className="connection-notice"><b>Couldn’t refine estimate</b><span>{analysisError}</span></div>}<button className="primary full" disabled={analyzing || analysis.clarifyingQuestions.some((_: string, index: number) => !answers[index]?.trim())} onClick={() => onAnalyze(answers)}>{analyzing ? "Refining estimate…" : "Update my estimate"}</button><button className="text-button" onClick={() => next("result")}>Use current estimate</button></>}
     {type === "result" && analysis && <>
       <div className={`result-photo ${uploadedPhoto ? "has-photo" : ""}`} style={uploadedPhoto ? { backgroundImage: `url(${uploadedPhoto})` } : undefined}>
-        <div><span>{analysis.calculationMethod === "verified_database" ? "Confirmed foods" : `${analysis.confidence} confidence`}</span><b>{analysis.calculationMethod === "verified_database" ? "Verified calculation" : "AI estimate"}</b></div>
+        <div><span>{analysis.calculationMethod === "verified_database" ? "Confirmed foods" : `${analysis.confidence} confidence`}</span><b>{analysis.calculationMethod === "verified_database" ? "Database calculation" : "AI estimate"}</b></div>
       </div>
       <div className="result-content">
         <div className="result-title-row"><div><p>SCANNED MEAL</p><h2>{analysis.mealName}</h2></div><button aria-label="Save meal for later">♡</button></div>
@@ -467,7 +467,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
                 <strong>{ingredient.name || "New ingredient"}</strong>
                 <span>{ingredient.amountGrams ? `${ingredient.amountGrams} g` : "Add grams"} · {ingredient.calories} kcal</span>
                 <small><i>C {formatMacro(ingredient.carbs)}g</i><i>P {formatMacro(ingredient.protein)}g</i><i>F {formatMacro(ingredient.fat)}g</i></small>
-                {ingredient.nutritionSource && <em className="nutrition-source">Verified · USDA FoodData Central · FDC {ingredient.fdcId}</em>}
+                {ingredient.nutritionSource && <em className="nutrition-source">Source · USDA FoodData Central · FDC ID {ingredient.fdcId}</em>}
               </button>
               {fixingResult && <button className="ingredient-edit-trigger" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>{editingIndex === index ? "−" : "Edit"}</button>}
             </div>
@@ -486,7 +486,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
         <div className="result-actions">
           {reviewDirty ? <button className="update-result" disabled={analyzing || reviewItems.length === 0 || reviewItems.some(item => !item.name.trim() || Number(item.amountGrams) <= 0)} onClick={recalculateReview}>{analyzing ? "Recalculating confirmed foods…" : "Update nutrition"}</button> : <><button className="log-result" onClick={() => onAddAnalysis("today")}>Log meal · {analysis.calories.best} kcal</button><button className="plan-result" onClick={() => onAddAnalysis("plan")}>Add to plan</button></>}
         </div>
-        <p className="fine-print">Nutrition values are estimates. Verify ingredients, allergens and serving sizes.</p>
+        <p className="fine-print">Nutrition values are estimates and can vary by product and preparation. Verify ingredients, allergens and serving sizes. USDA does not endorse NutriPath.</p>
       </div>
     </>}
     {type === "profile" && <><div className="profile-head"><div className="avatar big">GG</div><div><h2>Gabriel</h2><p>Weight loss · Metric units</p></div></div><div className="modal-list settings"><button><span><strong>Goals & targets</strong><small>1,850 kcal · 130g protein</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath Plus · Manage or cancel</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger">Log out</button></>}
