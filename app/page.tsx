@@ -19,9 +19,15 @@ type MealReview = {
   ingredients: FoodAnalysis["ingredients"];
 };
 
-function numericValue(value: unknown) {
+function numericValue(value: unknown, decimalPlaces = 0) {
   const number = Number(value);
-  return Number.isFinite(number) ? Math.max(0, Math.round(number)) : 0;
+  if (!Number.isFinite(number)) return 0;
+  const factor = 10 ** decimalPlaces;
+  return Math.max(0, Math.round(number * factor) / factor);
+}
+
+function formatMacro(value: unknown) {
+  return numericValue(value, 1).toFixed(1);
 }
 
 function gramValue(ingredient: any) {
@@ -41,18 +47,18 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
           name: confirmed.name,
           amountGrams: confirmed.amountGrams,
           calories: numericValue(calculated.calories),
-          protein: numericValue(calculated.protein),
-          carbs: numericValue(calculated.carbs),
-          fat: numericValue(calculated.fat),
+          protein: numericValue(calculated.protein, 1),
+          carbs: numericValue(calculated.carbs, 1),
+          fat: numericValue(calculated.fat, 1),
         };
       })
     : returnedIngredients.map((ingredient: any) => ({
         name: String(ingredient?.name || "Food"),
         amountGrams: gramValue(ingredient),
         calories: numericValue(ingredient?.calories),
-        protein: numericValue(ingredient?.protein),
-        carbs: numericValue(ingredient?.carbs),
-        fat: numericValue(ingredient?.fat),
+        protein: numericValue(ingredient?.protein, 1),
+        carbs: numericValue(ingredient?.carbs, 1),
+        fat: numericValue(ingredient?.fat, 1),
       }));
 
   return {
@@ -63,10 +69,10 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
       high: numericValue(raw?.calories?.high),
       best: numericValue(raw?.calories?.best),
     },
-    protein: numericValue(raw?.protein),
-    carbs: numericValue(raw?.carbs),
-    fat: numericValue(raw?.fat),
-    fibre: numericValue(raw?.fibre),
+    protein: numericValue(raw?.protein, 1),
+    carbs: numericValue(raw?.carbs, 1),
+    fat: numericValue(raw?.fat, 1),
+    fibre: numericValue(raw?.fibre, 1),
     ingredients,
     confidence: ["High", "Medium", "Low"].includes(raw?.confidence) ? raw.confidence : "Low",
     uncertainties: Array.isArray(raw?.uncertainties) ? raw.uncertainties : [],
@@ -441,9 +447,9 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
         <div className="result-title-row"><div><p>SCANNED MEAL</p><h2>{analysis.mealName}</h2></div><button aria-label="Save meal for later">♡</button></div>
         <div className="calorie-summary"><strong>{analysis.calories.best}</strong><span>kcal</span><small>{analysis.calories.low}–{analysis.calories.high} estimated range</small></div>
         <div className="result-macro-cards">
-          <div className="carbs"><span>Carbs</span><strong>{analysis.carbs}g</strong></div>
-          <div className="protein"><span>Protein</span><strong>{analysis.protein}g</strong></div>
-          <div className="fat"><span>Fat</span><strong>{analysis.fat}g</strong></div>
+          <div className="carbs"><span>Carbs</span><strong>{formatMacro(analysis.carbs)}g</strong></div>
+          <div className="protein"><span>Protein</span><strong>{formatMacro(analysis.protein)}g</strong></div>
+          <div className="fat"><span>Fat</span><strong>{formatMacro(analysis.fat)}g</strong></div>
         </div>
         {confirmedUpdate && <div className="result-updated">✓ Changes saved — confirmed grams retained</div>}
         {analysis.uncertainties.length > 0 && <div className="result-uncertainty"><b>Estimate note</b><span>{analysis.uncertainties.join(" · ")}</span></div>}
@@ -454,7 +460,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
               <button className="ingredient-main" disabled={!fixingResult} onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
                 <strong>{ingredient.name || "New ingredient"}</strong>
                 <span>{ingredient.amountGrams ? `${ingredient.amountGrams} g` : "Add grams"} · {ingredient.calories} kcal</span>
-                <small><i>C {ingredient.carbs}g</i><i>P {ingredient.protein}g</i><i>F {ingredient.fat}g</i></small>
+                <small><i>C {formatMacro(ingredient.carbs)}g</i><i>P {formatMacro(ingredient.protein)}g</i><i>F {formatMacro(ingredient.fat)}g</i></small>
               </button>
               {fixingResult && <button className="ingredient-edit-trigger" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>{editingIndex === index ? "−" : "Edit"}</button>}
             </div>
