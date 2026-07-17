@@ -1,3 +1,4 @@
+import "server-only";
 import { calculateVerifiedIngredients } from "./nutrition-calculator";
 
 type AnalyzeRequest = {
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
           confidence: "High",
           uncertainties: [],
           clarifyingQuestions: [],
-          notes: "Calculated from verified USDA FoodData Central values and your confirmed gram amounts.",
+          notes: "Calculated from USDA FoodData Central values and your confirmed gram amounts. USDA does not endorse NutriPath.",
           calculationMethod: "verified_database",
         },
       });

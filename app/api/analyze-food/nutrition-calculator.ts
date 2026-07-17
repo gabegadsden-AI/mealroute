@@ -1,3 +1,5 @@
+import "server-only";
+
 export type ConfirmedIngredient = {
   name: string;
   amountGrams: number;
@@ -128,7 +130,10 @@ async function searchFoodDataCentral(name: string, apiKey: string): Promise<Per1
       requireAllWords: false,
     }),
   });
-  if (!response.ok) throw new Error("The verified nutrition database is temporarily unavailable.");
+  if (response.status === 429) {
+    throw new Error("The USDA nutrition service has reached its request limit. Please wait and try again later.");
+  }
+  if (!response.ok) throw new Error("The USDA nutrition database is temporarily unavailable.");
   const payload = await response.json() as { foods?: FdcFood[] };
   const query = normalize(name);
   const candidates = (payload.foods || [])
@@ -171,8 +176,8 @@ export async function calculateVerifiedIngredients(confirmed: ConfirmedIngredien
   if (unmatched.length > 0) {
     const detail = unmatched.map(name => `“${name}”`).join(", ");
     throw new Error(apiKey
-      ? `No confident verified database match was found for ${detail}. Make the food name more specific, including cooked or raw.`
-      : `A USDA_API_KEY is required to find verified nutrition for ${detail}. Add it in Vercel Environment Variables, then redeploy.`);
+      ? `No confident USDA database match was found for ${detail}. Make the food name more specific, including cooked or raw.`
+      : `A USDA_API_KEY is required to find USDA nutrition data for ${detail}. Add it in Vercel Environment Variables, then redeploy.`);
   }
   return calculated;
 }
