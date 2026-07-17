@@ -1,3 +1,5 @@
+import { calculateVerifiedIngredients } from "./nutrition-calculator";
+
 type AnalyzeRequest = {
   image?: string;
   mode?: "analyze" | "review";
@@ -65,12 +67,6 @@ export async function POST(request: Request) {
     }
 
     const runtimeEnv = process.env as Record<string, string | undefined>;
-    const apiKey = runtimeEnv.OPENAI_API_KEY;
-    if (!apiKey) {
-      return Response.json({ error: "Live AI analysis has not been securely connected yet." }, { status: 503 });
-    }
-
-    const isRefinement = !isReview && Array.isArray(body.answers) && body.answers.some(Boolean);
     const reviewedIngredients = isReview
       ? submittedReviewIngredients.slice(0, 20).map(item => ({
           name: String(item.name || "").slice(0, 100),
@@ -80,7 +76,36 @@ export async function POST(request: Request) {
     if (isReview && reviewedIngredients.length === 0) {
       return Response.json({ error: "At least one confirmed ingredient and gram amount is required." }, { status: 400 });
     }
+    if (isReview) {
+      const ingredients = await calculateVerifiedIngredients(reviewedIngredients, runtimeEnv.USDA_API_KEY);
+      const calories = ingredients.reduce((sum, item) => sum + item.calories, 0);
+      const protein = roundMacro(ingredients.reduce((sum, item) => sum + item.protein, 0));
+      const carbs = roundMacro(ingredients.reduce((sum, item) => sum + item.carbs, 0));
+      const fat = roundMacro(ingredients.reduce((sum, item) => sum + item.fat, 0));
+      return Response.json({
+        analysis: {
+          mealName: body.previousAnalysis?.mealName || "Confirmed meal",
+          calories: { low: calories, high: calories, best: calories },
+          protein,
+          carbs,
+          fat,
+          fibre: 0,
+          ingredients,
+          confidence: "High",
+          uncertainties: [],
+          clarifyingQuestions: [],
+          notes: "Calculated from verified USDA FoodData Central values and your confirmed gram amounts.",
+          calculationMethod: "verified_database",
+        },
+      });
+    }
 
+    const apiKey = runtimeEnv.OPENAI_API_KEY;
+    if (!apiKey) {
+      return Response.json({ error: "Live AI analysis has not been securely connected yet." }, { status: 503 });
+    }
+
+    const isRefinement = !isReview && Array.isArray(body.answers) && body.answers.some(Boolean);
     const refinementContext = isRefinement
       ? `\nThis is a refinement. Previous analysis: ${JSON.stringify(body.previousAnalysis)}\nUser answers: ${body.answers!.map((answer, index) => `${index + 1}. ${String(answer).slice(0, 300)}`).join(" ")}\nUse the answers as authoritative details. Recalculate ingredient calories and totals, then return no further questions unless absolutely essential.`
       : "";
