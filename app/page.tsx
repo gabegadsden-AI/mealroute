@@ -13,22 +13,21 @@ type FoodAnalysis = {
   uncertainties: string[];
   clarifyingQuestions: string[];
   notes: string;
-  calculationMethod?: "ai_estimate" | "verified_database";
+  calculationMethod?: "verified_database" | "ai_estimate";
 };
 type ReviewIngredient = Omit<FoodAnalysis["ingredients"][number], "amountGrams"> & { amountGrams: number | "" };
 type MealReview = {
   ingredients: FoodAnalysis["ingredients"];
 };
 
-function numericValue(value: unknown, decimalPlaces = 0) {
+function numericValue(value: unknown) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return 0;
-  const factor = 10 ** decimalPlaces;
-  return Math.max(0, Math.round(number * factor) / factor);
+  return Number.isFinite(number) ? Math.max(0, Math.round(number)) : 0;
 }
 
-function formatMacro(value: unknown) {
-  return numericValue(value, 1).toFixed(1);
+function nutritionValue(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.round((number + Number.EPSILON) * 10) / 10) : 0;
 }
 
 function gramValue(ingredient: any) {
@@ -48,22 +47,22 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
           name: confirmed.name,
           amountGrams: confirmed.amountGrams,
           calories: numericValue(calculated.calories),
-          protein: numericValue(calculated.protein, 1),
-          carbs: numericValue(calculated.carbs, 1),
-          fat: numericValue(calculated.fat, 1),
-          nutritionSource: calculated.nutritionSource ? String(calculated.nutritionSource) : undefined,
-          fdcId: calculated.fdcId ? numericValue(calculated.fdcId) : undefined,
+          protein: nutritionValue(calculated.protein),
+          carbs: nutritionValue(calculated.carbs),
+          fat: nutritionValue(calculated.fat),
+          nutritionSource: String(calculated.nutritionSource || confirmed.nutritionSource || "") || undefined,
+          fdcId: Number.isFinite(Number(calculated.fdcId ?? confirmed.fdcId)) ? Number(calculated.fdcId ?? confirmed.fdcId) : undefined,
         };
       })
     : returnedIngredients.map((ingredient: any) => ({
         name: String(ingredient?.name || "Food"),
         amountGrams: gramValue(ingredient),
         calories: numericValue(ingredient?.calories),
-        protein: numericValue(ingredient?.protein, 1),
-        carbs: numericValue(ingredient?.carbs, 1),
-        fat: numericValue(ingredient?.fat, 1),
-        nutritionSource: ingredient?.nutritionSource ? String(ingredient.nutritionSource) : undefined,
-        fdcId: ingredient?.fdcId ? numericValue(ingredient.fdcId) : undefined,
+        protein: nutritionValue(ingredient?.protein),
+        carbs: nutritionValue(ingredient?.carbs),
+        fat: nutritionValue(ingredient?.fat),
+        nutritionSource: String(ingredient?.nutritionSource || "") || undefined,
+        fdcId: Number.isFinite(Number(ingredient?.fdcId)) ? Number(ingredient.fdcId) : undefined,
       }));
 
   return {
@@ -74,10 +73,10 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
       high: numericValue(raw?.calories?.high),
       best: numericValue(raw?.calories?.best),
     },
-    protein: numericValue(raw?.protein, 1),
-    carbs: numericValue(raw?.carbs, 1),
-    fat: numericValue(raw?.fat, 1),
-    fibre: numericValue(raw?.fibre, 1),
+    protein: nutritionValue(raw?.protein),
+    carbs: nutritionValue(raw?.carbs),
+    fat: nutritionValue(raw?.fat),
+    fibre: nutritionValue(raw?.fibre),
     ingredients,
     confidence: ["High", "Medium", "Low"].includes(raw?.confidence) ? raw.confidence : "Low",
     uncertainties: Array.isArray(raw?.uncertainties) ? raw.uncertainties : [],
@@ -403,7 +402,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   }, [type, analysis]);
 
   function updateReviewName(index: number, value: string) {
-    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: value } : item));
+    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, fdcId: undefined, nutritionSource: undefined } : item));
     setReviewDirty(true);
     setConfirmedUpdate(false);
   }
@@ -447,15 +446,15 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
     {type === "clarify" && analysis && <><span className="step-label">{analysis.clarifyingQuestions.length} quick {analysis.clarifyingQuestions.length === 1 ? "question" : "questions"}</span><div className="modal-icon">?</div><h2>A little detail will improve your estimate</h2><p className="modal-sub">NutriPath identified this as <b>{analysis.mealName}</b>, with {analysis.confidence.toLowerCase()} confidence.</p><div className="question-list">{analysis.clarifyingQuestions.map((question: string, index: number) => <label key={question}><span>{question}</span><input value={answers[index] || ""} onChange={event => setAnswers(current => { const updated = [...current]; updated[index] = event.target.value; return updated; })} placeholder="Type your answer, or ‘not sure’" /></label>)}</div>{analysisError && <div className="connection-notice"><b>Couldn’t refine estimate</b><span>{analysisError}</span></div>}<button className="primary full" disabled={analyzing || analysis.clarifyingQuestions.some((_: string, index: number) => !answers[index]?.trim())} onClick={() => onAnalyze(answers)}>{analyzing ? "Refining estimate…" : "Update my estimate"}</button><button className="text-button" onClick={() => next("result")}>Use current estimate</button></>}
     {type === "result" && analysis && <>
       <div className={`result-photo ${uploadedPhoto ? "has-photo" : ""}`} style={uploadedPhoto ? { backgroundImage: `url(${uploadedPhoto})` } : undefined}>
-        <div><span>{analysis.calculationMethod === "verified_database" ? "Confirmed foods" : `${analysis.confidence} confidence`}</span><b>{analysis.calculationMethod === "verified_database" ? "Database calculation" : "AI estimate"}</b></div>
+        <div><span>{analysis.confidence} confidence</span><b>{analysis.calculationMethod === "verified_database" ? "Database calculation" : "AI estimate"}</b></div>
       </div>
       <div className="result-content">
         <div className="result-title-row"><div><p>SCANNED MEAL</p><h2>{analysis.mealName}</h2></div><button aria-label="Save meal for later">♡</button></div>
         <div className="calorie-summary"><strong>{analysis.calories.best}</strong><span>kcal</span><small>{analysis.calculationMethod === "verified_database" ? "Calculated from confirmed grams" : `${analysis.calories.low}–${analysis.calories.high} estimated range`}</small></div>
         <div className="result-macro-cards">
-          <div className="carbs"><span>Carbs</span><strong>{formatMacro(analysis.carbs)}g</strong></div>
-          <div className="protein"><span>Protein</span><strong>{formatMacro(analysis.protein)}g</strong></div>
-          <div className="fat"><span>Fat</span><strong>{formatMacro(analysis.fat)}g</strong></div>
+          <div className="carbs"><span>Carbs</span><strong>{analysis.carbs}g</strong></div>
+          <div className="protein"><span>Protein</span><strong>{analysis.protein}g</strong></div>
+          <div className="fat"><span>Fat</span><strong>{analysis.fat}g</strong></div>
         </div>
         {confirmedUpdate && <div className="result-updated">✓ Changes saved — confirmed grams retained</div>}
         {analysis.uncertainties.length > 0 && <div className="result-uncertainty"><b>Estimate note</b><span>{analysis.uncertainties.join(" · ")}</span></div>}
@@ -466,8 +465,8 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
               <button className="ingredient-main" disabled={!fixingResult} onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
                 <strong>{ingredient.name || "New ingredient"}</strong>
                 <span>{ingredient.amountGrams ? `${ingredient.amountGrams} g` : "Add grams"} · {ingredient.calories} kcal</span>
-                <small><i>C {formatMacro(ingredient.carbs)}g</i><i>P {formatMacro(ingredient.protein)}g</i><i>F {formatMacro(ingredient.fat)}g</i></small>
-                {ingredient.nutritionSource && <em className="nutrition-source">Source · USDA FoodData Central · FDC ID {ingredient.fdcId}</em>}
+                <small><i>C {ingredient.carbs}g</i><i>P {ingredient.protein}g</i><i>F {ingredient.fat}g</i></small>
+                {ingredient.fdcId && <em className="ingredient-source">Source · {ingredient.nutritionSource || "USDA FoodData Central"} · FDC ID {ingredient.fdcId}</em>}
               </button>
               {fixingResult && <button className="ingredient-edit-trigger" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>{editingIndex === index ? "−" : "Edit"}</button>}
             </div>
