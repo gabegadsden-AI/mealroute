@@ -1,3 +1,5 @@
+import { calculateVerifiedIngredients } from "./nutrition-calculator";
+
 type AnalyzeRequest = {
   image?: string;
   mode?: "analyze" | "review";
@@ -8,14 +10,11 @@ type AnalyzeRequest = {
     notes?: string;
   };
   review?: {
-    ingredients?: { name?: string; amountGrams?: number; calories?: number; protein?: number; carbs?: number; fat?: number }[];
+    ingredients?: { name?: string; amountGrams?: number; calories?: number; protein?: number; carbs?: number; fat?: number; fdcId?: number }[];
   };
 };
 
-function roundMacro(value: unknown) {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.max(0, Math.round(number * 10) / 10) : 0;
-}
+const round1 = (value: number) => Math.round((value + Number.EPSILON) * 10) / 10;
 
 const schema = {
   type: "object",
@@ -27,10 +26,10 @@ const schema = {
       type: "object", additionalProperties: false, required: ["low", "high", "best"],
       properties: { low: { type: "integer" }, high: { type: "integer" }, best: { type: "integer" } },
     },
-    protein: { type: "number", description: "Estimated grams, rounded to one decimal place." },
-    carbs: { type: "number", description: "Estimated grams, rounded to one decimal place." },
-    fat: { type: "number", description: "Estimated grams, rounded to one decimal place." },
-    fibre: { type: "number", description: "Estimated grams, rounded to one decimal place." },
+    protein: { type: "integer", description: "Estimated grams." },
+    carbs: { type: "integer", description: "Estimated grams." },
+    fat: { type: "integer", description: "Estimated grams." },
+    fibre: { type: "integer", description: "Estimated grams." },
     ingredients: {
       type: "array",
       items: {
@@ -39,9 +38,9 @@ const schema = {
           name: { type: "string" },
           amountGrams: { type: "integer", minimum: 1, maximum: 5000, description: "A single whole-number gram amount. Never include words such as about or approximately." },
           calories: { type: "integer" },
-          protein: { type: "number", description: "Estimated grams for this ingredient, rounded to one decimal place." },
-          carbs: { type: "number", description: "Estimated grams for this ingredient, rounded to one decimal place." },
-          fat: { type: "number", description: "Estimated grams for this ingredient, rounded to one decimal place." },
+          protein: { type: "integer", description: "Estimated grams for this ingredient." },
+          carbs: { type: "integer", description: "Estimated grams for this ingredient." },
+          fat: { type: "integer", description: "Estimated grams for this ingredient." },
         },
       },
     },
@@ -65,28 +64,52 @@ export async function POST(request: Request) {
     }
 
     const runtimeEnv = process.env as Record<string, string | undefined>;
-    const apiKey = runtimeEnv.OPENAI_API_KEY;
-    if (!apiKey) {
-      return Response.json({ error: "Live AI analysis has not been securely connected yet." }, { status: 503 });
-    }
-
-    const isRefinement = !isReview && Array.isArray(body.answers) && body.answers.some(Boolean);
     const reviewedIngredients = isReview
       ? submittedReviewIngredients.slice(0, 20).map(item => ({
           name: String(item.name || "").slice(0, 100),
           amountGrams: Math.min(5000, Math.max(1, Math.round(Number(item.amountGrams) || 1))),
+          fdcId: Number.isFinite(Number(item.fdcId)) && Number(item.fdcId) > 0 ? Math.round(Number(item.fdcId)) : undefined,
         })).filter(item => item.name)
       : [];
     if (isReview && reviewedIngredients.length === 0) {
       return Response.json({ error: "At least one confirmed ingredient and gram amount is required." }, { status: 400 });
     }
 
+    if (isReview) {
+      const ingredients = await calculateVerifiedIngredients(reviewedIngredients, runtimeEnv.USDA_API_KEY);
+      const calories = Math.round(ingredients.reduce((sum, item) => sum + item.calories, 0));
+      const protein = round1(ingredients.reduce((sum, item) => sum + item.protein, 0));
+      const carbs = round1(ingredients.reduce((sum, item) => sum + item.carbs, 0));
+      const fat = round1(ingredients.reduce((sum, item) => sum + item.fat, 0));
+      return Response.json({
+        analysis: {
+          mealName: body.previousAnalysis?.mealName || "Confirmed meal",
+          calories: { low: calories, high: calories, best: calories },
+          protein,
+          carbs,
+          fat,
+          fibre: 0,
+          ingredients,
+          confidence: body.previousAnalysis?.confidence || "High",
+          uncertainties: [],
+          clarifyingQuestions: [],
+          notes: "Nutrition calculated from your confirmed foods, exact gram amounts, and the displayed USDA FoodData Central records.",
+          calculationMethod: "verified_database",
+        },
+      });
+    }
+
+    const apiKey = runtimeEnv.OPENAI_API_KEY;
+    if (!apiKey) {
+      return Response.json({ error: "Live AI analysis has not been securely connected yet." }, { status: 503 });
+    }
+
+    const isRefinement = Array.isArray(body.answers) && body.answers.some(Boolean);
+
     const refinementContext = isRefinement
       ? `\nThis is a refinement. Previous analysis: ${JSON.stringify(body.previousAnalysis)}\nUser answers: ${body.answers!.map((answer, index) => `${index + 1}. ${String(answer).slice(0, 300)}`).join(" ")}\nUse the answers as authoritative details. Recalculate ingredient calories and totals, then return no further questions unless absolutely essential.`
       : "";
-    const prompt = isReview
-      ? `Recalculate nutrition from this locked, user-confirmed ingredient list: ${JSON.stringify(reviewedIngredients)}. This is a text-only calculation; do not analyze or reinterpret the meal photo, and ignore every previous calorie or macro total. Return exactly the same number of ingredients, in the same order, with the exact same names and amountGrams values. Never add, remove, rename, replace, split, or combine a food. Respect preparation details in each confirmed name, such as cooked, raw, skinless, or boneless. Do not add oil, sauce, butter, skin, bones, or another ingredient unless it appears explicitly in the confirmed list. Calculate calories, protein, carbohydrates, and fat for each confirmed gram amount using standard per-100-gram nutrition data and exact arithmetic. Round calories to whole numbers and macros to one decimal place. Set mealName to ${JSON.stringify(body.previousAnalysis?.mealName || "Confirmed meal")}. Make the meal totals equal the ingredient sums, return no uncertainties and no clarifying questions, and state in notes that nutrition was recalculated from the user's confirmed foods and grams.`
-      : `Analyze this meal photograph for a calorie-tracking app. Identify only foods reasonably supported by the image; never substitute a canned meal or invent an ingredient as certain. Estimate each visible portion conservatively and return one whole-number amountGrams value for every ingredient. Display a single gram number such as 120, never a range and never words such as "about" or "approximately". Calculate calories, protein, carbohydrates, and fat for every ingredient and for the complete meal. Do not assume restaurant-sized portions. Do not add oil, butter, dressing, or sauce as consumed unless it is visible or confirmed by the user; when it is uncertain, mention it and ask about it instead. The best calorie estimate must closely equal the sum of ingredient calories and must fall inside the low-to-high range. Total protein, carbs, and fat should closely equal the sums of the ingredient-level macros. Use a wider calorie range when portion size is visually uncertain. Ask zero to two short clarifying questions only when an answer could materially improve the estimate, prioritizing portion size and hidden cooking fats or sauces. Nutrition values and image-derived gram amounts must be presented as estimates, not facts. If the image is not food or is too unclear, say so in mealName and notes, use Low confidence, and do not fabricate a meal.${refinementContext}`;
+    const prompt = `Analyze this meal photograph for a calorie-tracking app. Identify only foods reasonably supported by the image; never substitute a canned meal or invent an ingredient as certain. Estimate each visible portion conservatively and return one whole-number amountGrams value for every ingredient. Display a single gram number such as 120, never a range and never words such as "about" or "approximately". Calculate calories, protein, carbohydrates, and fat for every ingredient and for the complete meal. Do not assume restaurant-sized portions. Do not add oil, butter, dressing, or sauce as consumed unless it is visible or confirmed by the user; when it is uncertain, mention it and ask about it instead. The best calorie estimate must closely equal the sum of ingredient calories and must fall inside the low-to-high range. Total protein, carbs, and fat should closely equal the sums of the ingredient-level macros. Use a wider calorie range when portion size is visually uncertain. Ask zero to two short clarifying questions only when an answer could materially improve the estimate, prioritizing portion size and hidden cooking fats or sauces. Nutrition values and image-derived gram amounts must be presented as estimates, not facts. If the image is not food or is too unclear, say so in mealName and notes, use Low confidence, and do not fabricate a meal.${refinementContext}`;
 
     const apiResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -97,9 +120,7 @@ export async function POST(request: Request) {
         max_output_tokens: 1800,
         input: [{
           role: "user",
-          content: isReview
-            ? [{ type: "input_text", text: prompt }]
-            : [{ type: "input_text", text: prompt }, { type: "input_image", image_url: body.image, detail: "high" }],
+          content: [{ type: "input_text", text: prompt }, { type: "input_image", image_url: body.image, detail: "high" }],
         }],
         text: { format: { type: "json_schema", name: "food_analysis", strict: true, schema } },
       }),
@@ -130,35 +151,17 @@ export async function POST(request: Request) {
       notes: string;
       ingredients: { name: string; amountGrams: number; calories: number; protein: number; carbs: number; fat: number }[];
     };
-    if (isReview) {
-      analysis.mealName = body.previousAnalysis?.mealName || analysis.mealName;
-      analysis.ingredients = reviewedIngredients.map((confirmed, index) => {
-        const calculated = analysis.ingredients[index] || { calories: 0, protein: 0, carbs: 0, fat: 0 };
-        return {
-          name: confirmed.name,
-          amountGrams: confirmed.amountGrams,
-          calories: Math.max(0, Math.round(calculated.calories)),
-          protein: roundMacro(calculated.protein),
-          carbs: roundMacro(calculated.carbs),
-          fat: roundMacro(calculated.fat),
-        };
-      });
-      analysis.confidence = body.previousAnalysis?.confidence || analysis.confidence;
-      analysis.uncertainties = [];
-      analysis.clarifyingQuestions = [];
-      analysis.notes = "Nutrition recalculated from your confirmed foods and exact gram amounts.";
-    }
     const ingredientTotal = analysis.ingredients.reduce((sum, item) => sum + Math.max(0, Math.round(item.calories)), 0);
     const best = ingredientTotal > 0 ? ingredientTotal : Math.max(0, Math.round(analysis.calories.best));
     const originalLow = Math.max(0, Math.round(analysis.calories.low));
     const originalHigh = Math.max(0, Math.round(analysis.calories.high));
     analysis.calories.best = best;
-    analysis.calories.low = isReview ? Math.max(0, Math.round(best * 0.95)) : Math.min(originalLow, originalHigh, best);
-    analysis.calories.high = isReview ? Math.max(best, Math.round(best * 1.05)) : Math.max(originalLow, originalHigh, best);
+    analysis.calories.low = Math.min(originalLow, originalHigh, best);
+    analysis.calories.high = Math.max(originalLow, originalHigh, best);
     if (analysis.ingredients.length > 0) {
-      analysis.protein = roundMacro(analysis.ingredients.reduce((sum, item) => sum + roundMacro(item.protein), 0));
-      analysis.carbs = roundMacro(analysis.ingredients.reduce((sum, item) => sum + roundMacro(item.carbs), 0));
-      analysis.fat = roundMacro(analysis.ingredients.reduce((sum, item) => sum + roundMacro(item.fat), 0));
+      analysis.protein = analysis.ingredients.reduce((sum, item) => sum + Math.max(0, Math.round(item.protein)), 0);
+      analysis.carbs = analysis.ingredients.reduce((sum, item) => sum + Math.max(0, Math.round(item.carbs)), 0);
+      analysis.fat = analysis.ingredients.reduce((sum, item) => sum + Math.max(0, Math.round(item.fat)), 0);
     }
 
     return Response.json({ analysis });
