@@ -530,6 +530,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
                 <span>{ingredient.amountGrams ? `${ingredient.amountGrams} g` : "Add grams"} · {ingredient.calories} kcal</span>
                 <small><i>C {ingredient.carbs}g</i><i>P {ingredient.protein}g</i><i>F {ingredient.fat}g</i></small>
                 {ingredient.nutritionSource && <em className="ingredient-source">Source · {ingredient.nutritionSource}{ingredient.fdcId ? ` · FDC ID ${ingredient.fdcId}` : ""}</em>}
+                {ingredient.calculationSource === "usda" && <em className="packaged-food-hint">Packaged product? Select Edit, then “Use package nutrition label” for the exact brand values.</em>}
               </button>
               {fixingResult && <button className="ingredient-edit-trigger" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>{editingIndex === index ? "−" : "Edit"}</button>}
             </div>
