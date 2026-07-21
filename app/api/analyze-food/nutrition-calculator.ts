@@ -68,16 +68,31 @@ function nutrient(food: FdcFood, id: number) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function nutrientAny(food: FdcFood, ids: number[]) {
+  for (const id of ids) {
+    const value = nutrient(food, id);
+    if (value > 0) return value;
+  }
+  return 0;
+}
+
 function toPer100g(food: FdcFood): Per100gFood | null {
   const fdcId = Number(food.fdcId);
   if (!Number.isFinite(fdcId) || fdcId <= 0) return null;
+  const protein = nutrient(food, 1003);
+  const carbs = nutrient(food, 1005);
+  const fat = nutrient(food, 1004);
+  // USDA Foundation records may publish energy under Atwater-specific (2048)
+  // or Atwater-general (2047) identifiers instead of legacy Energy (1008).
+  const reportedCalories = nutrientAny(food, [1008, 2048, 2047]);
+  const macroCalories = protein * 4 + carbs * 4 + fat * 9;
   const result: Per100gFood = {
     description: String(food.description || "USDA food"),
     fdcId: Math.round(fdcId),
-    calories: nutrient(food, 1008),
-    protein: nutrient(food, 1003),
-    carbs: nutrient(food, 1005),
-    fat: nutrient(food, 1004),
+    calories: reportedCalories > 0 ? reportedCalories : round1(macroCalories),
+    protein,
+    carbs,
+    fat,
     fibre: nutrient(food, 1079),
     matches: () => false,
   };
