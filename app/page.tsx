@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
 type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string };
 type LabelNutrition = { productName: string; energyValue: number; energyUnit: "kcal" | "kJ"; carbs: number; protein: number; fat: number; fibre: number };
+type SavedPackagedProduct = LabelNutrition & { id: string; updatedAt: number };
 type LabelNutritionDraft = Omit<LabelNutrition, "energyValue" | "carbs" | "protein" | "fat" | "fibre"> & { energyValue: number | ""; carbs: number | ""; protein: number | ""; fat: number | ""; fibre: number | "" };
 type AnalysisIngredient = { name: string; amountGrams: number; calories: number; protein: number; carbs: number; fat: number; fibre: number; nutritionSource?: string; calculationSource?: "nutrition_label" | "usda"; fdcId?: number; labelNutrition?: LabelNutrition };
 type FoodAnalysis = {
@@ -22,6 +23,8 @@ type ReviewIngredient = Omit<AnalysisIngredient, "amountGrams" | "labelNutrition
 type MealReview = {
   ingredients: ReviewIngredient[];
 };
+
+const SAVED_PRODUCTS_KEY = "nutripath:saved-packaged-products:v1";
 
 function numericValue(value: unknown) {
   const number = Number(value);
@@ -151,17 +154,25 @@ export default function Home() {
     setAnalysis(null);
     setAnalysisError("");
     setUploadedData(null);
-    setUploadedPhoto(current => {
-      if (current) URL.revokeObjectURL(current);
-      return URL.createObjectURL(file);
-    });
     setModal("scan");
-    const sourceUrl = URL.createObjectURL(file);
+    let sourceUrl = "";
     try {
+      const isHeic = /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+      let preparedFile: Blob = file;
+      if (isHeic) {
+        const heic2any = (await import("heic2any")).default;
+        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.86 });
+        preparedFile = Array.isArray(converted) ? converted[0] : converted;
+      }
+      setUploadedPhoto(current => {
+        if (current) URL.revokeObjectURL(current);
+        return URL.createObjectURL(preparedFile);
+      });
+      sourceUrl = URL.createObjectURL(preparedFile);
       const source = await new Promise<HTMLImageElement>((resolve, reject) => {
         const image = new Image();
         image.onload = () => resolve(image);
-        image.onerror = () => reject(new Error("The source image could not be decoded."));
+        image.onerror = () => reject(new Error("This photo could not be decoded. Please choose a JPG, PNG, HEIC or HEIF image."));
         image.src = sourceUrl;
       });
       const maxDimension = 1400;
@@ -176,9 +187,10 @@ export default function Home() {
       context.drawImage(source, 0, 0, width, height);
       setUploadedData(canvas.toDataURL("image/jpeg", 0.78));
     } catch (error) {
-      setAnalysisError(error instanceof Error ? error.message : "This photo could not be prepared. Please choose another image.");
+      const isHeic = /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+      setAnalysisError(error instanceof Error && !isHeic ? error.message : isHeic ? "This iPhone photo could not be converted. Please try Take a photo or upload a screenshot." : "This photo could not be prepared. Please choose another image.");
     } finally {
-      URL.revokeObjectURL(sourceUrl);
+      if (sourceUrl) URL.revokeObjectURL(sourceUrl);
     }
   }
 
@@ -381,12 +393,23 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   const [fixingResult, setFixingResult] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [confirmedUpdate, setConfirmedUpdate] = useState(false);
+  const [savedProducts, setSavedProducts] = useState<SavedPackagedProduct[]>([]);
   const confirmedReviewRef = useRef<ReviewIngredient[] | null>(null);
+
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(SAVED_PRODUCTS_KEY) || "[]");
+      if (Array.isArray(parsed)) setSavedProducts(parsed.filter(item => item?.id && item?.productName));
+    } catch {
+      setSavedProducts([]);
+    }
+  }, []);
 
   useEffect(() => {
     if (type !== "result" || !analysis) return;
     const confirmed = confirmedReviewRef.current;
     if (confirmed) {
+      saveLabelProfiles(confirmed);
       setReviewItems(confirmed.map((ingredient, index) => {
         const recalculated = analysis.ingredients[index] || ingredient;
         return {
@@ -406,6 +429,29 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
     setEditingIndex(null);
   }, [type, analysis]);
 
+  function saveLabelProfiles(ingredients: ReviewIngredient[]) {
+    const labels = ingredients.filter(item => item.labelNutrition && labelIsComplete(item)).map(item => {
+      const label = item.labelNutrition!;
+      return {
+        id: label.productName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `product-${Date.now()}`,
+        productName: label.productName.trim(),
+        energyValue: Number(label.energyValue), energyUnit: label.energyUnit,
+        carbs: Number(label.carbs), protein: Number(label.protein), fat: Number(label.fat), fibre: Number(label.fibre), updatedAt: Date.now(),
+      } satisfies SavedPackagedProduct;
+    });
+    if (!labels.length) return;
+    setSavedProducts(current => {
+      const next = [...current];
+      labels.forEach(label => {
+        const index = next.findIndex(item => item.id === label.id);
+        if (index >= 0) next[index] = label; else next.unshift(label);
+      });
+      const limited = next.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50);
+      window.localStorage.setItem(SAVED_PRODUCTS_KEY, JSON.stringify(limited));
+      return limited;
+    });
+  }
+
   function updateReviewName(index: number, value: string) {
     setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, fdcId: undefined, nutritionSource: undefined, calculationSource: undefined } : item));
     setReviewDirty(true);
@@ -414,6 +460,20 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
 
   function togglePackageLabel(index: number, enabled: boolean) {
     setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, fdcId: undefined, nutritionSource: undefined, calculationSource: undefined, labelNutrition: enabled ? { productName: item.name || "Packaged food", energyValue: "", energyUnit: "kJ", carbs: "", protein: "", fat: "", fibre: "" } : undefined } : item));
+    setReviewDirty(true); setConfirmedUpdate(false);
+  }
+
+  function selectSavedProduct(index: number, productId: string) {
+    const product = savedProducts.find(item => item.id === productId);
+    if (!product) return;
+    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? {
+      ...item,
+      name: item.name || product.productName,
+      fdcId: undefined,
+      nutritionSource: undefined,
+      calculationSource: undefined,
+      labelNutrition: { productName: product.productName, energyValue: product.energyValue, energyUnit: product.energyUnit, carbs: product.carbs, protein: product.protein, fat: product.fat, fibre: product.fibre },
+    } : item));
     setReviewDirty(true); setConfirmedUpdate(false);
   }
 
@@ -514,6 +574,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
             {fixingResult && editingIndex === index && <div className="ingredient-inline-editor">
               <label><span>Food</span><input value={ingredient.name} onChange={event => updateReviewName(index, event.target.value)} placeholder="Food name" /></label>
               <label><span>Grams</span><input type="number" inputMode="numeric" min="1" max="5000" step="1" value={ingredient.amountGrams} onChange={event => updateReviewGrams(index, event.target.value)} placeholder="120" /><small className="gram-unit">g</small></label>
+              {savedProducts.length > 0 && <label className="saved-product-picker"><span>Saved packaged product</span><select value="" onChange={event => selectSavedProduct(index, event.target.value)}><option value="">Choose a saved product</option>{savedProducts.map(product => <option key={product.id} value={product.id}>{product.productName}</option>)}</select><small>Loads the saved per-100 g label values. You only need to confirm the portion grams.</small></label>}
               <label className="package-label-toggle"><input type="checkbox" checked={Boolean(ingredient.labelNutrition)} onChange={event => togglePackageLabel(index, event.target.checked)} /><span>Use package nutrition label</span></label>
               {ingredient.labelNutrition && <div className="package-label-fields">
                 <div className="package-label-heading"><strong>Required values per 100 g</strong><small>Type every figure exactly as printed on the package.</small></div>
