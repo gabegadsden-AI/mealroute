@@ -37,11 +37,7 @@ function normalizeLabel(raw: any): LabelNutrition | undefined {
   if (!raw) return undefined;
   const values = [raw.energyValue, raw.carbs, raw.protein, raw.fat, raw.fibre].map(Number);
   if (!(values[0] > 0) || values.some(value => !Number.isFinite(value) || value < 0)) return undefined;
-  return {
-    productName: String(raw.productName || "Packaged food"),
-    energyValue: values[0], energyUnit: raw.energyUnit === "kJ" ? "kJ" : "kcal",
-    carbs: values[1], protein: values[2], fat: values[3], fibre: values[4],
-  };
+  return { productName: String(raw.productName || "Packaged food"), energyValue: values[0], energyUnit: raw.energyUnit === "kJ" ? "kJ" : "kcal", carbs: values[1], protein: values[2], fat: values[3], fibre: values[4] };
 }
 
 function gramValue(ingredient: any) {
@@ -61,10 +57,7 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
           name: confirmed.name,
           amountGrams: confirmed.amountGrams,
           calories: numericValue(calculated.calories),
-          protein: nutritionValue(calculated.protein),
-          carbs: nutritionValue(calculated.carbs),
-          fat: nutritionValue(calculated.fat),
-          fibre: nutritionValue(calculated.fibre),
+          protein: nutritionValue(calculated.protein), carbs: nutritionValue(calculated.carbs), fat: nutritionValue(calculated.fat), fibre: nutritionValue(calculated.fibre),
           nutritionSource: String(calculated.nutritionSource || confirmed.nutritionSource || "") || undefined,
           calculationSource: calculated.calculationSource || confirmed.calculationSource,
           fdcId: Number.isFinite(Number(calculated.fdcId ?? confirmed.fdcId)) ? Number(calculated.fdcId ?? confirmed.fdcId) : undefined,
@@ -75,14 +68,9 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
         name: String(ingredient?.name || "Food"),
         amountGrams: gramValue(ingredient),
         calories: numericValue(ingredient?.calories),
-        protein: nutritionValue(ingredient?.protein),
-        carbs: nutritionValue(ingredient?.carbs),
-        fat: nutritionValue(ingredient?.fat),
-        fibre: nutritionValue(ingredient?.fibre),
-        nutritionSource: String(ingredient?.nutritionSource || "") || undefined,
-        calculationSource: ingredient?.calculationSource,
-        fdcId: Number.isFinite(Number(ingredient?.fdcId)) ? Number(ingredient.fdcId) : undefined,
-        labelNutrition: normalizeLabel(ingredient?.labelNutrition),
+        protein: nutritionValue(ingredient?.protein), carbs: nutritionValue(ingredient?.carbs), fat: nutritionValue(ingredient?.fat), fibre: nutritionValue(ingredient?.fibre),
+        nutritionSource: String(ingredient?.nutritionSource || "") || undefined, calculationSource: ingredient?.calculationSource,
+        fdcId: Number.isFinite(Number(ingredient?.fdcId)) ? Number(ingredient.fdcId) : undefined, labelNutrition: normalizeLabel(ingredient?.labelNutrition),
       }));
 
   return {
@@ -93,10 +81,7 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
       high: numericValue(raw?.calories?.high),
       best: numericValue(raw?.calories?.best),
     },
-    protein: nutritionValue(raw?.protein),
-    carbs: nutritionValue(raw?.carbs),
-    fat: nutritionValue(raw?.fat),
-    fibre: nutritionValue(raw?.fibre),
+    protein: nutritionValue(raw?.protein), carbs: nutritionValue(raw?.carbs), fat: nutritionValue(raw?.fat), fibre: nutritionValue(raw?.fibre),
     ingredients,
     confidence: ["High", "Medium", "Low"].includes(raw?.confidence) ? raw.confidence : "Low",
     uncertainties: Array.isArray(raw?.uncertainties) ? raw.uncertainties : [],
@@ -428,15 +413,8 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   }
 
   function togglePackageLabel(index: number, enabled: boolean) {
-    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? {
-      ...item,
-      fdcId: undefined,
-      nutritionSource: undefined,
-      calculationSource: undefined,
-      labelNutrition: enabled ? { productName: item.name || "Packaged food", energyValue: "", energyUnit: "kJ", carbs: "", protein: "", fat: "", fibre: "" } : undefined,
-    } : item));
-    setReviewDirty(true);
-    setConfirmedUpdate(false);
+    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, fdcId: undefined, nutritionSource: undefined, calculationSource: undefined, labelNutrition: enabled ? { productName: item.name || "Packaged food", energyValue: "", energyUnit: "kJ", carbs: "", protein: "", fat: "", fibre: "" } : undefined } : item));
+    setReviewDirty(true); setConfirmedUpdate(false);
   }
 
   function updateLabelField(index: number, field: keyof LabelNutritionDraft, rawValue: string) {
@@ -445,15 +423,25 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
       const value = field === "productName" || field === "energyUnit" ? rawValue : rawValue === "" ? "" : Math.max(0, Number(rawValue));
       return { ...item, labelNutrition: { ...item.labelNutrition, [field]: value } as LabelNutritionDraft };
     }));
-    setReviewDirty(true);
-    setConfirmedUpdate(false);
+    setReviewDirty(true); setConfirmedUpdate(false);
   }
 
   function labelIsComplete(item: ReviewIngredient) {
     const label = item.labelNutrition;
     if (!label) return true;
-    const values = [label.energyValue, label.carbs, label.protein, label.fat, label.fibre].map(Number);
+    const rawValues = [label.energyValue, label.carbs, label.protein, label.fat, label.fibre];
+    if (rawValues.some(value => value === "")) return false;
+    const values = rawValues.map(Number);
     return Boolean(label.productName.trim() && values[0] > 0 && values.every(value => Number.isFinite(value) && value >= 0));
+  }
+
+  function reviewValidationMessage() {
+    if (reviewItems.length === 0) return "Add at least one ingredient.";
+    if (reviewItems.some(item => !item.name.trim())) return "Enter a food name for every ingredient.";
+    if (reviewItems.some(item => Number(item.amountGrams) <= 0)) return "Enter a gram amount greater than zero.";
+    const incompleteLabel = reviewItems.find(item => item.labelNutrition && !labelIsComplete(item));
+    if (incompleteLabel) return `Complete every package-label field for ${incompleteLabel.labelNutrition?.productName || incompleteLabel.name}. Light example text is not saved data.`;
+    return "";
   }
 
   function updateReviewGrams(index: number, value: string) {
@@ -480,25 +468,14 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
 
   function recalculateReview() {
     const ingredients = reviewItems
-      .map(item => ({
-        ...item,
-        name: item.name.trim(),
-        amountGrams: Number(item.amountGrams),
-        labelNutrition: item.labelNutrition ? {
-          productName: item.labelNutrition.productName.trim(),
-          energyValue: Number(item.labelNutrition.energyValue),
-          energyUnit: item.labelNutrition.energyUnit,
-          carbs: Number(item.labelNutrition.carbs),
-          protein: Number(item.labelNutrition.protein),
-          fat: Number(item.labelNutrition.fat),
-          fibre: Number(item.labelNutrition.fibre),
-        } : undefined,
-      }))
+      .map(item => ({ ...item, name: item.name.trim(), amountGrams: Number(item.amountGrams), labelNutrition: item.labelNutrition ? { productName: item.labelNutrition.productName.trim(), energyValue: Number(item.labelNutrition.energyValue), energyUnit: item.labelNutrition.energyUnit, carbs: Number(item.labelNutrition.carbs), protein: Number(item.labelNutrition.protein), fat: Number(item.labelNutrition.fat), fibre: Number(item.labelNutrition.fibre) } : undefined }))
       .filter(item => item.name && item.amountGrams > 0) as ReviewIngredient[];
     confirmedReviewRef.current = ingredients.map(ingredient => ({ ...ingredient }));
     setReviewItems(ingredients.map(ingredient => ({ ...ingredient })));
     onAnalyze([], { ingredients });
   }
+
+  const reviewProblem = reviewDirty ? reviewValidationMessage() : "";
 
   return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && close()}><section className={`modal-sheet ${type === "result" ? "result-sheet" : ""}`}>
     <button className="modal-close" onClick={close}>×</button>
@@ -539,14 +516,14 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
               <label><span>Grams</span><input type="number" inputMode="numeric" min="1" max="5000" step="1" value={ingredient.amountGrams} onChange={event => updateReviewGrams(index, event.target.value)} placeholder="120" /><small className="gram-unit">g</small></label>
               <label className="package-label-toggle"><input type="checkbox" checked={Boolean(ingredient.labelNutrition)} onChange={event => togglePackageLabel(index, event.target.checked)} /><span>Use package nutrition label</span></label>
               {ingredient.labelNutrition && <div className="package-label-fields">
-                <div className="package-label-heading"><strong>Values per 100 g</strong><small>Enter the figures exactly as printed on the package.</small></div>
-                <label className="product-name"><span>Product name</span><input value={ingredient.labelNutrition.productName} onChange={event => updateLabelField(index, "productName", event.target.value)} placeholder="Jungle Oats" /></label>
-                <label><span>Energy</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.energyValue} onChange={event => updateLabelField(index, "energyValue", event.target.value)} placeholder="1584" /></label>
+                <div className="package-label-heading"><strong>Required values per 100 g</strong><small>Type every figure exactly as printed on the package.</small></div>
+                <label className="product-name"><span>Product name</span><input value={ingredient.labelNutrition.productName} onChange={event => updateLabelField(index, "productName", event.target.value)} placeholder="Enter product name" /></label>
+                <label><span>Energy</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.energyValue} onChange={event => updateLabelField(index, "energyValue", event.target.value)} placeholder="Enter value" /></label>
                 <label><span>Unit</span><select value={ingredient.labelNutrition.energyUnit} onChange={event => updateLabelField(index, "energyUnit", event.target.value)}><option value="kJ">kJ</option><option value="kcal">kcal</option></select></label>
-                <label><span>Carbs (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.carbs} onChange={event => updateLabelField(index, "carbs", event.target.value)} placeholder="57" /></label>
-                <label><span>Protein (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.protein} onChange={event => updateLabelField(index, "protein", event.target.value)} placeholder="13.1" /></label>
-                <label><span>Fat (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.fat} onChange={event => updateLabelField(index, "fat", event.target.value)} placeholder="7.9" /></label>
-                <label><span>Fibre (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.fibre} onChange={event => updateLabelField(index, "fibre", event.target.value)} placeholder="11.6" /></label>
+                <label><span>Carbs (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.carbs} onChange={event => updateLabelField(index, "carbs", event.target.value)} placeholder="Enter value" /></label>
+                <label><span>Protein (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.protein} onChange={event => updateLabelField(index, "protein", event.target.value)} placeholder="Enter value" /></label>
+                <label><span>Fat (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.fat} onChange={event => updateLabelField(index, "fat", event.target.value)} placeholder="Enter value" /></label>
+                <label><span>Fibre (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.fibre} onChange={event => updateLabelField(index, "fibre", event.target.value)} placeholder="Enter value" /></label>
               </div>}
               <button onClick={() => removeReviewItem(index)}>Remove ingredient</button>
             </div>}
@@ -557,8 +534,9 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
           <details className="hidden-calories"><summary>Oil, butter, sauces <span>Add exact grams</span></summary><p>If one is missing, select “Add new ingredient,” enter its name, then enter the grams used. NutriPath will calculate it with the rest of the confirmed meal.</p></details>
         </>}
         {analysisError && <div className="connection-notice"><b>Couldn’t update estimate</b><span>{analysisError}</span></div>}
+        {reviewProblem && <div className="review-validation-hint"><b>Complete the required fields</b><span>{reviewProblem}</span></div>}
         <div className="result-actions">
-          {reviewDirty ? <button className="update-result" disabled={analyzing || reviewItems.length === 0 || reviewItems.some(item => !item.name.trim() || Number(item.amountGrams) <= 0 || !labelIsComplete(item))} onClick={recalculateReview}>{analyzing ? "Recalculating confirmed foods…" : "Update nutrition"}</button> : <><button className="log-result" onClick={() => onAddAnalysis("today")}>Log meal · {analysis.calories.best} kcal</button><button className="plan-result" onClick={() => onAddAnalysis("plan")}>Add to plan</button></>}
+          {reviewDirty ? <button className="update-result" disabled={analyzing || Boolean(reviewProblem)} onClick={recalculateReview}>{analyzing ? "Recalculating confirmed foods…" : "Update nutrition"}</button> : <><button className="log-result" onClick={() => onAddAnalysis("today")}>Log meal · {analysis.calories.best} kcal</button><button className="plan-result" onClick={() => onAddAnalysis("plan")}>Add to plan</button></>}
         </div>
         <p className="fine-print">Package-label values are calculated exactly from the figures you enter. USDA values remain estimates and can vary by product and preparation. Verify ingredients, allergens and serving sizes. USDA does not endorse NutriPath.</p>
       </div>
