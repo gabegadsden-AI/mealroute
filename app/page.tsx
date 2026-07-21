@@ -4,20 +4,23 @@ import { useEffect, useRef, useState } from "react";
 
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
 type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string };
+type LabelNutrition = { productName: string; energyValue: number; energyUnit: "kcal" | "kJ"; carbs: number; protein: number; fat: number; fibre: number };
+type LabelNutritionDraft = Omit<LabelNutrition, "energyValue" | "carbs" | "protein" | "fat" | "fibre"> & { energyValue: number | ""; carbs: number | ""; protein: number | ""; fat: number | ""; fibre: number | "" };
+type AnalysisIngredient = { name: string; amountGrams: number; calories: number; protein: number; carbs: number; fat: number; fibre: number; nutritionSource?: string; calculationSource?: "nutrition_label" | "usda"; fdcId?: number; labelNutrition?: LabelNutrition };
 type FoodAnalysis = {
   mealName: string;
   calories: { low: number; high: number; best: number };
   protein: number; carbs: number; fat: number; fibre: number;
-  ingredients: { name: string; amountGrams: number; calories: number; protein: number; carbs: number; fat: number; nutritionSource?: string; fdcId?: number }[];
+  ingredients: AnalysisIngredient[];
   confidence: "High" | "Medium" | "Low";
   uncertainties: string[];
   clarifyingQuestions: string[];
   notes: string;
-  calculationMethod?: "verified_database" | "ai_estimate";
+  calculationMethod?: "verified_database" | "nutrition_label" | "mixed_sources" | "ai_estimate";
 };
-type ReviewIngredient = Omit<FoodAnalysis["ingredients"][number], "amountGrams"> & { amountGrams: number | "" };
+type ReviewIngredient = Omit<AnalysisIngredient, "amountGrams" | "labelNutrition"> & { amountGrams: number | ""; labelNutrition?: LabelNutritionDraft };
 type MealReview = {
-  ingredients: FoodAnalysis["ingredients"];
+  ingredients: ReviewIngredient[];
 };
 
 function numericValue(value: unknown) {
@@ -28,6 +31,17 @@ function numericValue(value: unknown) {
 function nutritionValue(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.round((number + Number.EPSILON) * 10) / 10) : 0;
+}
+
+function normalizeLabel(raw: any): LabelNutrition | undefined {
+  if (!raw) return undefined;
+  const values = [raw.energyValue, raw.carbs, raw.protein, raw.fat, raw.fibre].map(Number);
+  if (!(values[0] > 0) || values.some(value => !Number.isFinite(value) || value < 0)) return undefined;
+  return {
+    productName: String(raw.productName || "Packaged food"),
+    energyValue: values[0], energyUnit: raw.energyUnit === "kJ" ? "kJ" : "kcal",
+    carbs: values[1], protein: values[2], fat: values[3], fibre: values[4],
+  };
 }
 
 function gramValue(ingredient: any) {
@@ -50,8 +64,11 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
           protein: nutritionValue(calculated.protein),
           carbs: nutritionValue(calculated.carbs),
           fat: nutritionValue(calculated.fat),
+          fibre: nutritionValue(calculated.fibre),
           nutritionSource: String(calculated.nutritionSource || confirmed.nutritionSource || "") || undefined,
+          calculationSource: calculated.calculationSource || confirmed.calculationSource,
           fdcId: Number.isFinite(Number(calculated.fdcId ?? confirmed.fdcId)) ? Number(calculated.fdcId ?? confirmed.fdcId) : undefined,
+          labelNutrition: normalizeLabel(calculated.labelNutrition || confirmed.labelNutrition),
         };
       })
     : returnedIngredients.map((ingredient: any) => ({
@@ -61,8 +78,11 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
         protein: nutritionValue(ingredient?.protein),
         carbs: nutritionValue(ingredient?.carbs),
         fat: nutritionValue(ingredient?.fat),
+        fibre: nutritionValue(ingredient?.fibre),
         nutritionSource: String(ingredient?.nutritionSource || "") || undefined,
+        calculationSource: ingredient?.calculationSource,
         fdcId: Number.isFinite(Number(ingredient?.fdcId)) ? Number(ingredient.fdcId) : undefined,
+        labelNutrition: normalizeLabel(ingredient?.labelNutrition),
       }));
 
   return {
@@ -82,7 +102,7 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
     uncertainties: Array.isArray(raw?.uncertainties) ? raw.uncertainties : [],
     clarifyingQuestions: Array.isArray(raw?.clarifyingQuestions) ? raw.clarifyingQuestions : [],
     notes: String(raw?.notes || ""),
-    calculationMethod: raw?.calculationMethod === "verified_database" ? "verified_database" : "ai_estimate",
+    calculationMethod: ["verified_database", "nutrition_label", "mixed_sources"].includes(raw?.calculationMethod) ? raw.calculationMethod : "ai_estimate",
   };
 }
 
@@ -376,7 +396,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   const [fixingResult, setFixingResult] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [confirmedUpdate, setConfirmedUpdate] = useState(false);
-  const confirmedReviewRef = useRef<FoodAnalysis["ingredients"] | null>(null);
+  const confirmedReviewRef = useRef<ReviewIngredient[] | null>(null);
 
   useEffect(() => {
     if (type !== "result" || !analysis) return;
@@ -402,9 +422,38 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   }, [type, analysis]);
 
   function updateReviewName(index: number, value: string) {
-    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, fdcId: undefined, nutritionSource: undefined } : item));
+    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, fdcId: undefined, nutritionSource: undefined, calculationSource: undefined } : item));
     setReviewDirty(true);
     setConfirmedUpdate(false);
+  }
+
+  function togglePackageLabel(index: number, enabled: boolean) {
+    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? {
+      ...item,
+      fdcId: undefined,
+      nutritionSource: undefined,
+      calculationSource: undefined,
+      labelNutrition: enabled ? { productName: item.name || "Packaged food", energyValue: "", energyUnit: "kJ", carbs: "", protein: "", fat: "", fibre: "" } : undefined,
+    } : item));
+    setReviewDirty(true);
+    setConfirmedUpdate(false);
+  }
+
+  function updateLabelField(index: number, field: keyof LabelNutritionDraft, rawValue: string) {
+    setReviewItems(items => items.map((item, itemIndex) => {
+      if (itemIndex !== index || !item.labelNutrition) return item;
+      const value = field === "productName" || field === "energyUnit" ? rawValue : rawValue === "" ? "" : Math.max(0, Number(rawValue));
+      return { ...item, labelNutrition: { ...item.labelNutrition, [field]: value } as LabelNutritionDraft };
+    }));
+    setReviewDirty(true);
+    setConfirmedUpdate(false);
+  }
+
+  function labelIsComplete(item: ReviewIngredient) {
+    const label = item.labelNutrition;
+    if (!label) return true;
+    const values = [label.energyValue, label.carbs, label.protein, label.fat, label.fibre].map(Number);
+    return Boolean(label.productName.trim() && values[0] > 0 && values.every(value => Number.isFinite(value) && value >= 0));
   }
 
   function updateReviewGrams(index: number, value: string) {
@@ -422,7 +471,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   }
 
   function addReviewItem() {
-    setReviewItems(items => [...items, { name: "", amountGrams: "", calories: 0, protein: 0, carbs: 0, fat: 0 }]);
+    setReviewItems(items => [...items, { name: "", amountGrams: "", calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0 }]);
     setEditingIndex(reviewItems.length);
     setFixingResult(true);
     setReviewDirty(true);
@@ -431,8 +480,21 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
 
   function recalculateReview() {
     const ingredients = reviewItems
-      .map(item => ({ ...item, name: item.name.trim(), amountGrams: Number(item.amountGrams) }))
-      .filter(item => item.name && item.amountGrams > 0) as FoodAnalysis["ingredients"];
+      .map(item => ({
+        ...item,
+        name: item.name.trim(),
+        amountGrams: Number(item.amountGrams),
+        labelNutrition: item.labelNutrition ? {
+          productName: item.labelNutrition.productName.trim(),
+          energyValue: Number(item.labelNutrition.energyValue),
+          energyUnit: item.labelNutrition.energyUnit,
+          carbs: Number(item.labelNutrition.carbs),
+          protein: Number(item.labelNutrition.protein),
+          fat: Number(item.labelNutrition.fat),
+          fibre: Number(item.labelNutrition.fibre),
+        } : undefined,
+      }))
+      .filter(item => item.name && item.amountGrams > 0) as ReviewIngredient[];
     confirmedReviewRef.current = ingredients.map(ingredient => ({ ...ingredient }));
     setReviewItems(ingredients.map(ingredient => ({ ...ingredient })));
     onAnalyze([], { ingredients });
@@ -446,16 +508,17 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
     {type === "clarify" && analysis && <><span className="step-label">{analysis.clarifyingQuestions.length} quick {analysis.clarifyingQuestions.length === 1 ? "question" : "questions"}</span><div className="modal-icon">?</div><h2>A little detail will improve your estimate</h2><p className="modal-sub">NutriPath identified this as <b>{analysis.mealName}</b>, with {analysis.confidence.toLowerCase()} confidence.</p><div className="question-list">{analysis.clarifyingQuestions.map((question: string, index: number) => <label key={question}><span>{question}</span><input value={answers[index] || ""} onChange={event => setAnswers(current => { const updated = [...current]; updated[index] = event.target.value; return updated; })} placeholder="Type your answer, or ‘not sure’" /></label>)}</div>{analysisError && <div className="connection-notice"><b>Couldn’t refine estimate</b><span>{analysisError}</span></div>}<button className="primary full" disabled={analyzing || analysis.clarifyingQuestions.some((_: string, index: number) => !answers[index]?.trim())} onClick={() => onAnalyze(answers)}>{analyzing ? "Refining estimate…" : "Update my estimate"}</button><button className="text-button" onClick={() => next("result")}>Use current estimate</button></>}
     {type === "result" && analysis && <>
       <div className={`result-photo ${uploadedPhoto ? "has-photo" : ""}`} style={uploadedPhoto ? { backgroundImage: `url(${uploadedPhoto})` } : undefined}>
-        <div><span>{analysis.confidence} confidence</span><b>{analysis.calculationMethod === "verified_database" ? "Database calculation" : "AI estimate"}</b></div>
+        <div><span>{analysis.confidence} confidence</span><b>{analysis.calculationMethod === "nutrition_label" ? "Nutrition label calculation" : analysis.calculationMethod === "mixed_sources" ? "Mixed-source calculation" : analysis.calculationMethod === "verified_database" ? "Database calculation" : "AI estimate"}</b></div>
       </div>
       <div className="result-content">
         <div className="result-title-row"><div><p>SCANNED MEAL</p><h2>{analysis.mealName}</h2></div><button aria-label="Save meal for later">♡</button></div>
-        <div className="calorie-summary"><strong>{analysis.calories.best}</strong><span>kcal</span><small>{analysis.calculationMethod === "verified_database" ? "Calculated from confirmed grams" : `${analysis.calories.low}–${analysis.calories.high} estimated range`}</small></div>
+        <div className="calorie-summary"><strong>{analysis.calories.best}</strong><span>kcal</span><small>{analysis.calculationMethod && analysis.calculationMethod !== "ai_estimate" ? "Calculated from confirmed grams" : `${analysis.calories.low}–${analysis.calories.high} estimated range`}</small></div>
         <div className="result-macro-cards">
           <div className="carbs"><span>Carbs</span><strong>{analysis.carbs}g</strong></div>
           <div className="protein"><span>Protein</span><strong>{analysis.protein}g</strong></div>
           <div className="fat"><span>Fat</span><strong>{analysis.fat}g</strong></div>
         </div>
+        {analysis.fibre > 0 && <div className="fibre-summary"><span>Fibre</span><strong>{analysis.fibre}g</strong><small>Shown separately from carbohydrates</small></div>}
         {confirmedUpdate && <div className="result-updated">✓ Changes saved — confirmed grams retained</div>}
         {analysis.uncertainties.length > 0 && <div className="result-uncertainty"><b>Estimate note</b><span>{analysis.uncertainties.join(" · ")}</span></div>}
         <div className="result-section-heading"><div><h3>Ingredients</h3><span>{reviewItems.length} detected</span></div><button className={fixingResult ? "active" : ""} onClick={() => { setFixingResult(value => !value); setEditingIndex(null); }}>{fixingResult ? "Done" : "Fix result"}</button></div>
@@ -466,13 +529,24 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
                 <strong>{ingredient.name || "New ingredient"}</strong>
                 <span>{ingredient.amountGrams ? `${ingredient.amountGrams} g` : "Add grams"} · {ingredient.calories} kcal</span>
                 <small><i>C {ingredient.carbs}g</i><i>P {ingredient.protein}g</i><i>F {ingredient.fat}g</i></small>
-                {ingredient.fdcId && <em className="ingredient-source">Source · {ingredient.nutritionSource || "USDA FoodData Central"} · FDC ID {ingredient.fdcId}</em>}
+                {ingredient.nutritionSource && <em className="ingredient-source">Source · {ingredient.nutritionSource}{ingredient.fdcId ? ` · FDC ID ${ingredient.fdcId}` : ""}</em>}
               </button>
               {fixingResult && <button className="ingredient-edit-trigger" onClick={() => setEditingIndex(editingIndex === index ? null : index)}>{editingIndex === index ? "−" : "Edit"}</button>}
             </div>
             {fixingResult && editingIndex === index && <div className="ingredient-inline-editor">
               <label><span>Food</span><input value={ingredient.name} onChange={event => updateReviewName(index, event.target.value)} placeholder="Food name" /></label>
               <label><span>Grams</span><input type="number" inputMode="numeric" min="1" max="5000" step="1" value={ingredient.amountGrams} onChange={event => updateReviewGrams(index, event.target.value)} placeholder="120" /><small className="gram-unit">g</small></label>
+              <label className="package-label-toggle"><input type="checkbox" checked={Boolean(ingredient.labelNutrition)} onChange={event => togglePackageLabel(index, event.target.checked)} /><span>Use package nutrition label</span></label>
+              {ingredient.labelNutrition && <div className="package-label-fields">
+                <div className="package-label-heading"><strong>Values per 100 g</strong><small>Enter the figures exactly as printed on the package.</small></div>
+                <label className="product-name"><span>Product name</span><input value={ingredient.labelNutrition.productName} onChange={event => updateLabelField(index, "productName", event.target.value)} placeholder="Jungle Oats" /></label>
+                <label><span>Energy</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.energyValue} onChange={event => updateLabelField(index, "energyValue", event.target.value)} placeholder="1584" /></label>
+                <label><span>Unit</span><select value={ingredient.labelNutrition.energyUnit} onChange={event => updateLabelField(index, "energyUnit", event.target.value)}><option value="kJ">kJ</option><option value="kcal">kcal</option></select></label>
+                <label><span>Carbs (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.carbs} onChange={event => updateLabelField(index, "carbs", event.target.value)} placeholder="57" /></label>
+                <label><span>Protein (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.protein} onChange={event => updateLabelField(index, "protein", event.target.value)} placeholder="13.1" /></label>
+                <label><span>Fat (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.fat} onChange={event => updateLabelField(index, "fat", event.target.value)} placeholder="7.9" /></label>
+                <label><span>Fibre (g)</span><input type="number" min="0" step="0.1" inputMode="decimal" value={ingredient.labelNutrition.fibre} onChange={event => updateLabelField(index, "fibre", event.target.value)} placeholder="11.6" /></label>
+              </div>}
               <button onClick={() => removeReviewItem(index)}>Remove ingredient</button>
             </div>}
           </div>)}
@@ -483,9 +557,9 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
         </>}
         {analysisError && <div className="connection-notice"><b>Couldn’t update estimate</b><span>{analysisError}</span></div>}
         <div className="result-actions">
-          {reviewDirty ? <button className="update-result" disabled={analyzing || reviewItems.length === 0 || reviewItems.some(item => !item.name.trim() || Number(item.amountGrams) <= 0)} onClick={recalculateReview}>{analyzing ? "Recalculating confirmed foods…" : "Update nutrition"}</button> : <><button className="log-result" onClick={() => onAddAnalysis("today")}>Log meal · {analysis.calories.best} kcal</button><button className="plan-result" onClick={() => onAddAnalysis("plan")}>Add to plan</button></>}
+          {reviewDirty ? <button className="update-result" disabled={analyzing || reviewItems.length === 0 || reviewItems.some(item => !item.name.trim() || Number(item.amountGrams) <= 0 || !labelIsComplete(item))} onClick={recalculateReview}>{analyzing ? "Recalculating confirmed foods…" : "Update nutrition"}</button> : <><button className="log-result" onClick={() => onAddAnalysis("today")}>Log meal · {analysis.calories.best} kcal</button><button className="plan-result" onClick={() => onAddAnalysis("plan")}>Add to plan</button></>}
         </div>
-        <p className="fine-print">Nutrition values are estimates and can vary by product and preparation. Verify ingredients, allergens and serving sizes. USDA does not endorse NutriPath.</p>
+        <p className="fine-print">Package-label values are calculated exactly from the figures you enter. USDA values remain estimates and can vary by product and preparation. Verify ingredients, allergens and serving sizes. USDA does not endorse NutriPath.</p>
       </div>
     </>}
     {type === "profile" && <><div className="profile-head"><div className="avatar big">GG</div><div><h2>Gabriel</h2><p>Weight loss · Metric units</p></div></div><div className="modal-list settings"><button><span><strong>Goals & targets</strong><small>1,850 kcal · 130g protein</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath Plus · Manage or cancel</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger">Log out</button></>}
