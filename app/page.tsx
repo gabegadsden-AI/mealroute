@@ -160,9 +160,8 @@ export default function Home() {
       const isHeic = /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
       let preparedFile: Blob = file;
       if (isHeic) {
-        const heic2any = (await import("heic2any")).default;
-        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.86 });
-        preparedFile = Array.isArray(converted) ? converted[0] : converted;
+        const { heicTo } = await import("heic-to/csp");
+        preparedFile = await heicTo({ blob: file, type: "image/jpeg", quality: 0.86 });
       }
       setUploadedPhoto(current => {
         if (current) URL.revokeObjectURL(current);
