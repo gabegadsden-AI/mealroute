@@ -25,6 +25,33 @@ type MealReview = {
 };
 
 const SAVED_PRODUCTS_KEY = "nutripath:saved-packaged-products:v1";
+const DAILY_MEALS_KEY = "nutripath:daily-meals:v1";
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeStoredMeal(raw: any): Meal | null {
+  if (!raw || !Number.isFinite(Number(raw.id)) || !String(raw.name || "").trim()) return null;
+  const numbers = ["calories", "protein", "carbs", "fat"].map(key => Number(raw[key]));
+  if (numbers.some(value => !Number.isFinite(value) || value < 0)) return null;
+  return {
+    id: Number(raw.id),
+    type: String(raw.type || "Logged meal"),
+    name: String(raw.name),
+    calories: numbers[0],
+    protein: numbers[1],
+    carbs: numbers[2],
+    fat: numbers[3],
+    time: String(raw.time || ""),
+    eaten: Boolean(raw.eaten),
+    locked: raw.locked ? true : undefined,
+    color: String(raw.color || "salmon"),
+  };
+}
 
 function numericValue(value: unknown) {
   const number = Number(value);
@@ -115,6 +142,7 @@ const navItems: { id: Tab; label: string; icon: string }[] = [
 export default function Home() {
   const [tab, setTab] = useState<Tab>("today");
   const [meals, setMeals] = useState(initialMeals);
+  const [dailyMealsReady, setDailyMealsReady] = useState(false);
   const [water, setWater] = useState(1500);
   const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile">(null);
   const [toast, setToast] = useState("");
@@ -132,6 +160,25 @@ export default function Home() {
   const fat = meals.filter(m => m.eaten).reduce((sum, m) => sum + m.fat, 0);
   const target = 1850;
   const pct = Math.min(100, Math.round((consumed / target) * 100));
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(DAILY_MEALS_KEY) || "null");
+      if (stored?.date === localDateKey() && Array.isArray(stored.meals)) {
+        const restored = stored.meals.map(normalizeStoredMeal).filter((meal: Meal | null): meal is Meal => Boolean(meal));
+        setMeals(restored);
+      }
+    } catch {
+      window.localStorage.removeItem(DAILY_MEALS_KEY);
+    } finally {
+      setDailyMealsReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!dailyMealsReady) return;
+    window.localStorage.setItem(DAILY_MEALS_KEY, JSON.stringify({ date: localDateKey(), meals }));
+  }, [dailyMealsReady, meals]);
 
   function notify(message: string) {
     setToast(message);
