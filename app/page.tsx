@@ -53,6 +53,16 @@ function normalizeStoredMeal(raw: any): Meal | null {
   };
 }
 
+function persistDailyMeals(meals: Meal[]) {
+  try {
+    const payload = JSON.stringify({ date: localDateKey(), meals });
+    window.localStorage.setItem(DAILY_MEALS_KEY, payload);
+    return window.localStorage.getItem(DAILY_MEALS_KEY) === payload;
+  } catch {
+    return false;
+  }
+}
+
 function numericValue(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.round(number)) : 0;
@@ -142,7 +152,6 @@ const navItems: { id: Tab; label: string; icon: string }[] = [
 export default function Home() {
   const [tab, setTab] = useState<Tab>("today");
   const [meals, setMeals] = useState(initialMeals);
-  const [dailyMealsReady, setDailyMealsReady] = useState(false);
   const [water, setWater] = useState(1500);
   const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile">(null);
   const [toast, setToast] = useState("");
@@ -170,15 +179,8 @@ export default function Home() {
       }
     } catch {
       window.localStorage.removeItem(DAILY_MEALS_KEY);
-    } finally {
-      setDailyMealsReady(true);
     }
   }, []);
-
-  useEffect(() => {
-    if (!dailyMealsReady) return;
-    window.localStorage.setItem(DAILY_MEALS_KEY, JSON.stringify({ date: localDateKey(), meals }));
-  }, [dailyMealsReady, meals]);
 
   function notify(message: string) {
     setToast(message);
@@ -186,8 +188,9 @@ export default function Home() {
   }
 
   function markMeal(id: number) {
-    setMeals(items => items.map(m => m.id === id ? { ...m, eaten: !m.eaten } : m));
-    notify("Today’s progress updated");
+    const nextMeals = meals.map(meal => meal.id === id ? { ...meal, eaten: !meal.eaten } : meal);
+    setMeals(nextMeals);
+    notify(persistDailyMeals(nextMeals) ? "Today’s progress updated and saved" : "Progress updated, but browser storage is unavailable");
   }
 
   function addWater(amount: number) {
@@ -273,15 +276,19 @@ export default function Home() {
 
   function addAnalyzedMeal(destination: "today" | "plan" = "today") {
     if (!analysis) return;
-    setMeals(items => [...items, {
+    const nextMeals = [...meals, {
       id: Date.now(), type: destination === "today" ? "Logged meal" : "Planned meal", name: analysis.mealName,
       calories: analysis.calories.best, protein: analysis.protein, carbs: analysis.carbs, fat: analysis.fat,
       time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       eaten: destination === "today", color: "salmon",
-    }]);
+    }];
+    setMeals(nextMeals);
+    const saved = persistDailyMeals(nextMeals);
     setModal(null);
     setTab(destination);
-    notify(destination === "today" ? `${analysis.mealName} logged` : `${analysis.mealName} added to your plan`);
+    notify(saved
+      ? destination === "today" ? `${analysis.mealName} logged and saved on this device` : `${analysis.mealName} added to your plan and saved`
+      : "Meal added, but browser storage is unavailable");
   }
 
   const title = tab === "today" ? "Today" : tab === "plan" ? "My Plan" : tab === "log" ? "Log Food" : tab === "grocery" ? "Grocery List" : "Progress";
