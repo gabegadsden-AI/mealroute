@@ -23,9 +23,12 @@ type ReviewIngredient = Omit<AnalysisIngredient, "amountGrams" | "labelNutrition
 type MealReview = {
   ingredients: ReviewIngredient[];
 };
+type MealHistory = Record<string, Meal[]>;
+type StoredMealHistory = { version: 2; days: MealHistory; planned: Meal[] };
 
 const SAVED_PRODUCTS_KEY = "nutripath:saved-packaged-products:v1";
 const DAILY_MEALS_KEY = "nutripath:daily-meals:v1";
+const MEAL_HISTORY_KEY = "nutripath:meal-history:v2";
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -53,14 +56,43 @@ function normalizeStoredMeal(raw: any): Meal | null {
   };
 }
 
-function persistDailyMeals(meals: Meal[]) {
+function normalizeMealList(raw: unknown) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(normalizeStoredMeal).filter((meal: Meal | null): meal is Meal => Boolean(meal));
+}
+
+function normalizeStoredHistory(raw: any): StoredMealHistory | null {
+  if (raw?.version !== 2 || !raw.days || typeof raw.days !== "object" || Array.isArray(raw.days)) return null;
+  const days: MealHistory = {};
+  Object.entries(raw.days).forEach(([date, meals]) => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) days[date] = normalizeMealList(meals);
+  });
+  return { version: 2, days, planned: normalizeMealList(raw.planned) };
+}
+
+function persistMealHistory(days: MealHistory, planned: Meal[]) {
   try {
-    const payload = JSON.stringify({ date: localDateKey(), meals });
-    window.localStorage.setItem(DAILY_MEALS_KEY, payload);
-    return window.localStorage.getItem(DAILY_MEALS_KEY) === payload;
+    const payload = JSON.stringify({ version: 2, days, planned });
+    window.localStorage.setItem(MEAL_HISTORY_KEY, payload);
+    return window.localStorage.getItem(MEAL_HISTORY_KEY) === payload;
   } catch {
     return false;
   }
+}
+
+function dateFromKey(key: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, Math.max(0, month - 1), day || 1);
+}
+
+function mealTotals(meals: Meal[]) {
+  return meals.filter(meal => meal.eaten).reduce((totals, meal) => ({
+    calories: totals.calories + meal.calories,
+    protein: totals.protein + meal.protein,
+    carbs: totals.carbs + meal.carbs,
+    fat: totals.fat + meal.fat,
+    count: totals.count + 1,
+  }), { calories: 0, protein: 0, carbs: 0, fat: 0, count: 0 });
 }
 
 function numericValue(value: unknown) {
@@ -138,20 +170,17 @@ const initialMeals: Meal[] = [
   { id: 4, type: "Snack", name: "Apple with almond butter", calories: 210, protein: 6, carbs: 24, fat: 11, time: "3:30 PM", eaten: false, color: "apple" },
 ];
 
-const weekDays = [
-  { day: "Mon", date: 6, value: 1720 }, { day: "Tue", date: 7, value: 1840 }, { day: "Wed", date: 8, value: 1610 },
-  { day: "Thu", date: 9, value: 1775 }, { day: "Fri", date: 10, value: 1690 }, { day: "Sat", date: 11, value: 890 }, { day: "Sun", date: 12, value: 0 },
-];
-
 const navItems: { id: Tab; label: string; icon: string }[] = [
   { id: "today", label: "Today", icon: "⌂" }, { id: "plan", label: "My Plan", icon: "▦" },
   { id: "log", label: "Log Food", icon: "+" }, { id: "grocery", label: "Grocery", icon: "✓" },
-  { id: "progress", label: "Progress", icon: "↗" },
+  { id: "progress", label: "History", icon: "↗" },
 ];
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("today");
-  const [meals, setMeals] = useState(initialMeals);
+  const [mealHistory, setMealHistory] = useState<MealHistory>({});
+  const [plannedMeals, setPlannedMeals] = useState<Meal[]>([]);
+  const [selectedDate, setSelectedDate] = useState("");
   const [water, setWater] = useState(1500);
   const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile">(null);
   const [toast, setToast] = useState("");
@@ -163,22 +192,44 @@ export default function Home() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
 
-  const consumed = meals.filter(m => m.eaten).reduce((sum, m) => sum + m.calories, 0);
-  const protein = meals.filter(m => m.eaten).reduce((sum, m) => sum + m.protein, 0);
-  const carbs = meals.filter(m => m.eaten).reduce((sum, m) => sum + m.carbs, 0);
-  const fat = meals.filter(m => m.eaten).reduce((sum, m) => sum + m.fat, 0);
+  const meals = selectedDate ? mealHistory[selectedDate] || [] : initialMeals;
+  const totals = mealTotals(meals);
+  const consumed = totals.calories;
+  const protein = totals.protein;
+  const carbs = totals.carbs;
+  const fat = totals.fat;
   const target = 1850;
   const pct = Math.min(100, Math.round((consumed / target) * 100));
 
   useEffect(() => {
     try {
-      const stored = JSON.parse(window.localStorage.getItem(DAILY_MEALS_KEY) || "null");
-      if (stored?.date === localDateKey() && Array.isArray(stored.meals)) {
-        const restored = stored.meals.map(normalizeStoredMeal).filter((meal: Meal | null): meal is Meal => Boolean(meal));
-        setMeals(restored);
+      const today = localDateKey();
+      const storedHistory = normalizeStoredHistory(JSON.parse(window.localStorage.getItem(MEAL_HISTORY_KEY) || "null"));
+      if (storedHistory) {
+        setMealHistory(storedHistory.days);
+        setPlannedMeals(storedHistory.planned);
+        setSelectedDate(today);
+        return;
       }
+
+      const legacy = JSON.parse(window.localStorage.getItem(DAILY_MEALS_KEY) || "null");
+      const legacyDate = /^\d{4}-\d{2}-\d{2}$/.test(String(legacy?.date || "")) ? String(legacy.date) : today;
+      const legacyMeals = normalizeMealList(legacy?.meals);
+      const migratedPlan = legacyMeals.filter(meal => meal.type === "Planned meal");
+      const migratedDay = legacyMeals.filter(meal => meal.type !== "Planned meal");
+      const days: MealHistory = legacyMeals.length ? { [legacyDate]: migratedDay } : { [today]: initialMeals };
+      if (!days[today]) days[today] = [];
+      if (persistMealHistory(days, migratedPlan)) window.localStorage.removeItem(DAILY_MEALS_KEY);
+      setMealHistory(days);
+      setPlannedMeals(migratedPlan);
+      setSelectedDate(today);
     } catch {
-      window.localStorage.removeItem(DAILY_MEALS_KEY);
+      const today = localDateKey();
+      const days = { [today]: initialMeals };
+      setMealHistory(days);
+      setPlannedMeals([]);
+      setSelectedDate(today);
+      persistMealHistory(days, []);
     }
   }, []);
 
@@ -188,9 +239,17 @@ export default function Home() {
   }
 
   function markMeal(id: number) {
-    const nextMeals = meals.map(meal => meal.id === id ? { ...meal, eaten: !meal.eaten } : meal);
-    setMeals(nextMeals);
-    notify(persistDailyMeals(nextMeals) ? "Today’s progress updated and saved" : "Progress updated, but browser storage is unavailable");
+    const date = selectedDate || localDateKey();
+    const nextMeals = (mealHistory[date] || []).map(meal => meal.id === id ? { ...meal, eaten: !meal.eaten } : meal);
+    const nextHistory = { ...mealHistory, [date]: nextMeals };
+    setMealHistory(nextHistory);
+    notify(persistMealHistory(nextHistory, plannedMeals) ? "This day’s progress updated and saved" : "Progress updated, but browser storage is unavailable");
+  }
+
+  function markPlannedMeal(id: number) {
+    const nextPlan = plannedMeals.map(meal => meal.id === id ? { ...meal, eaten: !meal.eaten } : meal);
+    setPlannedMeals(nextPlan);
+    notify(persistMealHistory(mealHistory, nextPlan) ? "Planned meal updated and saved" : "Plan updated, but browser storage is unavailable");
   }
 
   function addWater(amount: number) {
@@ -276,14 +335,24 @@ export default function Home() {
 
   function addAnalyzedMeal(destination: "today" | "plan" = "today") {
     if (!analysis) return;
-    const nextMeals = [...meals, {
+    const nextMeal = {
       id: Date.now(), type: destination === "today" ? "Logged meal" : "Planned meal", name: analysis.mealName,
       calories: analysis.calories.best, protein: analysis.protein, carbs: analysis.carbs, fat: analysis.fat,
       time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       eaten: destination === "today", color: "salmon",
-    }];
-    setMeals(nextMeals);
-    const saved = persistDailyMeals(nextMeals);
+    };
+    let saved = false;
+    if (destination === "today") {
+      const today = localDateKey();
+      const nextHistory = { ...mealHistory, [today]: [...(mealHistory[today] || []), nextMeal] };
+      setMealHistory(nextHistory);
+      setSelectedDate(today);
+      saved = persistMealHistory(nextHistory, plannedMeals);
+    } else {
+      const nextPlan = [...plannedMeals, nextMeal];
+      setPlannedMeals(nextPlan);
+      saved = persistMealHistory(mealHistory, nextPlan);
+    }
     setModal(null);
     setTab(destination);
     notify(saved
@@ -291,7 +360,8 @@ export default function Home() {
       : "Meal added, but browser storage is unavailable");
   }
 
-  const title = tab === "today" ? "Today" : tab === "plan" ? "My Plan" : tab === "log" ? "Log Food" : tab === "grocery" ? "Grocery List" : "Progress";
+  const selectedDateLabel = selectedDate ? dateFromKey(selectedDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }) : "";
+  const title = tab === "today" ? !selectedDate || selectedDate === localDateKey() ? "Today" : selectedDateLabel : tab === "plan" ? "My Plan" : tab === "log" ? "Log Food" : tab === "grocery" ? "Grocery List" : "History";
 
   return (
     <main className="app-shell">
@@ -307,16 +377,16 @@ export default function Home() {
       <section className="phone-app">
         <header className="topbar">
           <div className="mobile-brand"><Brand /></div>
-          <div><p className="eyebrow">SATURDAY, 11 JULY</p><h1>{title}</h1></div>
+          <div><p className="eyebrow">{selectedDateLabel ? selectedDateLabel.toUpperCase() : "YOUR NUTRITION"}</p><h1>{title}</h1></div>
           <button className="avatar" aria-label="Open profile" onClick={() => setModal("profile")}>GG</button>
         </header>
 
         <div className="content">
-          {tab === "today" && <Today meals={meals} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
-          {tab === "plan" && <Plan meals={meals} onMeal={markMeal} notify={notify} />}
+          {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
+          {tab === "plan" && <Plan meals={plannedMeals} onMeal={markPlannedMeal} notify={notify} />}
           {tab === "log" && <Log onPhoto={usePhoto} notify={notify} />}
           {tab === "grocery" && <Grocery checked={grocery} setChecked={setGrocery} notify={notify} />}
-          {tab === "progress" && <Progress range={range} setRange={setRange} />}
+          {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} />}
         </div>
 
         <nav className="bottom-nav" aria-label="Main navigation">
@@ -334,21 +404,25 @@ function Brand() {
   return <div className="brand"><div className="brandmark">N</div><div><strong>NutriPath</strong><small>Plan better. Track simply. Eat your way.</small></div></div>;
 }
 
-function Today({ meals, consumed, protein, carbs, fat, target, pct, water, onMeal, onWater, onLog }: any) {
+function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, pct, water, onMeal, onWater, onLog }: any) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const dates = today ? Array.from({ length: 7 }, (_, index) => {
     const date = new Date(today);
-    date.setDate(today.getDate() + index - 3);
+    date.setDate(today.getDate() + index - 6);
     return date;
   }) : [];
+  const selectedLabel = selectedDate
+    ? selectedDate === (today ? localDateKey(today) : "") ? "Today’s meals" : `${dateFromKey(selectedDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" })} meals`
+    : "Today’s meals";
   return <>
     <section className="daily-overview">
       <div className="today-date-strip">
-        {dates.length === 0 && Array.from({ length: 7 }, (_, index) => <div key={index}><span>--</span><strong>--</strong></div>)}
+        {dates.length === 0 && Array.from({ length: 7 }, (_, index) => <button key={index} disabled><span>--</span><strong>--</strong></button>)}
         {dates.map(date => {
-          const active = today && date.toDateString() === today.toDateString();
-          return <div key={date.toISOString()} className={active ? "active" : ""}><span>{date.toLocaleDateString([], { weekday: "short" }).slice(0, 2)}</span><strong>{date.getDate()}</strong>{active && <i />}</div>;
+          const dateKey = localDateKey(date);
+          const active = dateKey === selectedDate;
+          return <button type="button" key={dateKey} className={active ? "active" : ""} onClick={() => onSelectDate(dateKey)}><span>{date.toLocaleDateString([], { weekday: "short" }).slice(0, 2)}</span><strong>{date.getDate()}</strong>{active && <i />}</button>;
         })}
       </div>
       <div className="calorie-readout">
@@ -366,8 +440,10 @@ function Today({ meals, consumed, protein, carbs, fat, target, pct, water, onMea
     </section>
 
     <section className="section-block">
-      <div className="section-heading"><div><p className="eyebrow">YOUR DAY</p><h2>Today’s meals</h2></div><span>{meals.filter((m: Meal) => m.eaten).length} of {meals.length} complete</span></div>
-      <div className="meal-list">{meals.map((meal: Meal) => <MealCard key={meal.id} meal={meal} onMeal={onMeal} />)}</div>
+      <div className="section-heading history-heading"><div><p className="eyebrow">MEAL HISTORY</p><h2>{selectedLabel}</h2></div><input className="history-date-picker" aria-label="Choose meal history date" type="date" value={selectedDate} max={today ? localDateKey(today) : undefined} onChange={event => { if (event.target.value) onSelectDate(event.target.value); }} /></div>
+      {meals.length > 0
+        ? <><span className="history-count">{meals.filter((m: Meal) => m.eaten).length} of {meals.length} complete</span><div className="meal-list">{meals.map((meal: Meal) => <MealCard key={meal.id} meal={meal} onMeal={onMeal} />)}</div></>
+        : <div className="history-empty"><strong>No meals logged for this date.</strong><span>Select another day or log a meal for today.</span><button onClick={onLog}>Log today’s meal</button></div>}
     </section>
 
     <section className="insight-card"><div className="spark">✦</div><div><p className="eyebrow">TODAY’S INSIGHT</p><strong>You have {Math.max(0, 130 - protein)}g of protein remaining.</strong><p>Your planned meals can help close the gap.</p></div></section>
@@ -387,12 +463,13 @@ function MealCard({ meal, onMeal }: { meal: Meal; onMeal: (id: number) => void }
 }
 
 function Plan({ meals, onMeal, notify }: { meals: Meal[]; onMeal: (id: number) => void; notify: (s: string) => void }) {
-  const days = ["Mon 6", "Tue 7", "Wed 8", "Thu 9", "Fri 10", "Sat 11", "Sun 12"];
+  const plannedCalories = meals.reduce((sum, meal) => sum + meal.calories, 0);
   return <>
-    <section className="plan-summary"><div><p className="eyebrow">7-DAY PLAN</p><h2>Weight loss · 1,850 kcal</h2><p>High protein, practical meals, ingredients reused thoughtfully.</p></div><button onClick={() => notify("Plan options opened")}>•••</button></section>
-    <div className="date-strip">{days.map((d, i) => <button key={d} className={i === 5 ? "active" : ""}><span>{d.split(" ")[0]}</span><strong>{d.split(" ")[1]}</strong></button>)}</div>
-    <div className="plan-toolbar"><span><b>Saturday</b> · 1,720 kcal planned</span><button onClick={() => notify("Day regenerated — locked meals kept")}>↻ Regenerate</button></div>
-    <div className="meal-list plan-list">{meals.map(m => <div key={m.id} className="plan-meal"><MealCard meal={m} onMeal={onMeal} /><div className="plan-actions"><button onClick={() => notify("3 similar alternatives ready")}>Replace</button><button onClick={() => notify("Portion editor opened")}>Edit portion</button><button onClick={() => notify(m.locked ? "Meal unlocked" : "Meal locked")}>{m.locked ? "Unlock" : "Lock"}</button></div></div>)}</div>
+    <section className="plan-summary"><div><p className="eyebrow">SAVED MEAL PLAN</p><h2>{meals.length} {meals.length === 1 ? "meal" : "meals"} · {plannedCalories.toLocaleString()} kcal</h2><p>Planned meals stay here across different days until you decide to use or replace them.</p></div><button onClick={() => notify("Plan options opened")}>•••</button></section>
+    <div className="plan-toolbar"><span><b>Your reusable plan</b> · separate from food already eaten</span><button onClick={() => notify("Plan refreshed")}>↻ Refresh</button></div>
+    {meals.length > 0
+      ? <div className="meal-list plan-list">{meals.map(m => <div key={m.id} className="plan-meal"><MealCard meal={m} onMeal={onMeal} /><div className="plan-actions"><button onClick={() => notify("3 similar alternatives ready")}>Replace</button><button onClick={() => notify("Portion editor opened")}>Edit portion</button><button onClick={() => notify(m.locked ? "Meal unlocked" : "Meal locked")}>{m.locked ? "Unlock" : "Lock"}</button></div></div>)}</div>
+      : <div className="history-empty"><strong>No meals in your plan yet.</strong><span>Analyze a meal and select Add to plan.</span></div>}
     <button className="wide-button" onClick={() => notify("Grocery list is up to date")}>Review grocery list <span>→</span></button>
   </>;
 }
@@ -429,13 +506,32 @@ function Grocery({ checked, setChecked, notify }: any) {
   </>;
 }
 
-function Progress({ range, setRange }: { range: string; setRange: (s: string) => void }) {
+function Progress({ range, setRange, history, target }: { range: string; setRange: (s: string) => void; history: MealHistory; target: number }) {
+  const [today, setToday] = useState<Date | null>(null);
+  useEffect(() => setToday(new Date()), []);
+  const rangeDays = range === "Week" ? 7 : range === "Month" ? 30 : 90;
+  const periodDates = today ? Array.from({ length: rangeDays }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (rangeDays - 1 - index));
+    return localDateKey(date);
+  }) : [];
+  const periodTotals = periodDates.map(date => ({ date, ...mealTotals(history[date] || []) }));
+  const trackedDays = periodTotals.filter(day => day.count > 0);
+  const totalCalories = trackedDays.reduce((sum, day) => sum + day.calories, 0);
+  const averageCalories = trackedDays.length ? Math.round(totalCalories / trackedDays.length) : 0;
+  const proteinTargetDays = trackedDays.filter(day => day.protein >= 130).length;
+  const loggedMeals = trackedDays.reduce((sum, day) => sum + day.count, 0);
+  const chartDays = periodTotals.slice(-7).map(day => ({
+    key: day.date,
+    day: dateFromKey(day.date).toLocaleDateString([], { weekday: "short" }),
+    value: day.calories,
+  }));
   return <>
     <div className="segment">{["Week", "Month", "3 months"].map(x => <button key={x} className={range === x ? "active" : ""} onClick={() => setRange(x)}>{x}</button>)}</div>
-    <section className="weekly-win"><div className="spark">✦</div><div><p className="eyebrow">WEEKLY SUMMARY</p><h2>You’re finding your rhythm.</h2><p>You followed 78% of planned meals and reached your protein target on 5 of 7 days.</p></div></section>
-    <section className="stats-grid"><div><span>Meal plan</span><strong>78%</strong><small>adherence <b>↑ 6%</b></small></div><div><span>Avg. calories</span><strong>1,726</strong><small>124 below target</small></div><div><span>Protein target</span><strong>5/7</strong><small>days reached</small></div><div><span>Water logged</span><strong>6/7</strong><small>days tracked</small></div></section>
-    <section className="chart-card"><div className="section-heading"><div><p className="eyebrow">CALORIE CONSISTENCY</p><h2>Close to your target</h2></div><span>1,850 goal</span></div><div className="chart"><div className="goal-line"><span>Goal</span></div>{weekDays.map(d => <div className="bar-wrap" key={d.day}><div className={d.day === "Sat" ? "bar active" : "bar"} style={{ height: `${Math.max(8, d.value / 20)}px` }}><span>{d.value || "–"}</span></div><small>{d.day}</small></div>)}</div></section>
-    <section className="weight-card"><div><p className="eyebrow">WEIGHT TREND</p><h2>77.4 kg</h2><span>↓ 0.8 kg since 14 June</span></div><div className="weight-line"><i /><b /><em /></div><button>＋ Add weight</button></section>
+    <section className="weekly-win"><div className="spark">✦</div><div><p className="eyebrow">MEAL HISTORY</p><h2>{trackedDays.length ? `${trackedDays.length} ${trackedDays.length === 1 ? "day" : "days"} tracked.` : "Your history starts here."}</h2><p>{trackedDays.length ? `${loggedMeals} meals are saved in this ${range.toLowerCase()} view.` : "Log your first meal and NutriPath will build your calorie and macro history."}</p></div></section>
+    <section className="stats-grid"><div><span>Days logged</span><strong>{trackedDays.length}</strong><small>of {rangeDays} days</small></div><div><span>Avg. calories</span><strong>{averageCalories.toLocaleString()}</strong><small>{averageCalories ? `${Math.abs(target - averageCalories).toLocaleString()} ${averageCalories <= target ? "below" : "above"} target` : "No entries yet"}</small></div><div><span>Protein target</span><strong>{proteinTargetDays}/{trackedDays.length || 0}</strong><small>tracked days reached</small></div><div><span>Meals logged</span><strong>{loggedMeals}</strong><small>confirmed as eaten</small></div></section>
+    <section className="chart-card"><div className="section-heading"><div><p className="eyebrow">LAST 7 DAYS</p><h2>Calories by day</h2></div><span>{target.toLocaleString()} goal</span></div><div className="chart"><div className="goal-line"><span>Goal</span></div>{chartDays.map(day => <div className="bar-wrap" key={day.key}><div className={day.key === (today ? localDateKey(today) : "") ? "bar active" : "bar"} style={{ height: `${Math.max(8, Math.min(110, day.value / 20))}px` }}><span>{day.value || "–"}</span></div><small>{day.day}</small></div>)}</div></section>
+    <section className="weight-card"><div><p className="eyebrow">HISTORY STATUS</p><h2>{trackedDays.length} saved {trackedDays.length === 1 ? "day" : "days"}</h2><span>Stored on this browser and restored after refresh.</span></div><div className="weight-line"><i /><b /><em /></div></section>
   </>;
 }
 
