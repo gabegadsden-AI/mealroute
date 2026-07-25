@@ -1,12 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadCloudState,
   setLocalImportStatus,
   syncCloudMeals,
   syncCloudProducts,
 } from "../lib/cloud-data";
+import {
+  activityLabels,
+  cmToImperial,
+  goalLabels,
+  suggestedCalories,
+  type Activity,
+  type Goal,
+} from "../lib/calorie-goal";
 import { profileSelect, type NutriPathProfile } from "../lib/profile";
 import { createClient } from "../lib/supabase/client";
 
@@ -34,6 +42,10 @@ type MealReview = {
 type MealHistory = Record<string, Meal[]>;
 type StoredMealHistory = { version: 2; days: MealHistory; planned: Meal[] };
 type LegacyImportData = StoredMealHistory & { savedProducts: SavedPackagedProduct[] };
+type ProfileGoalUpdate = Pick<
+  NutriPathProfile,
+  "weight_kg" | "height_cm" | "weight_unit" | "height_unit" | "primary_goal" | "activity_level" | "calorie_goal" | "suggested_calorie_goal"
+>;
 
 const SAVED_PRODUCTS_KEY = "nutripath:saved-packaged-products:v1";
 const DAILY_MEALS_KEY = "nutripath:daily-meals:v1";
@@ -271,7 +283,7 @@ export default function Home() {
   const [importingLegacy, setImportingLegacy] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [water, setWater] = useState(1500);
-  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile">(null);
+  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals">(null);
   const [toast, setToast] = useState("");
   const [grocery, setGrocery] = useState<Record<string, boolean>>({ "Greek yoghurt": true, "Blueberries": true });
   const [range, setRange] = useState("Week");
@@ -412,6 +424,25 @@ export default function Home() {
     } catch {
       notify("The nutrition label was kept on this device, but account sync needs another update.");
     }
+  }
+
+  async function saveProfileGoals(values: ProfileGoalUpdate) {
+    if (!userId) return "Your account is still loading. Please try again.";
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(values)
+      .eq("user_id", userId)
+      .select(profileSelect)
+      .single();
+
+    if (error || !data) {
+      return "Your goals could not be saved. Please check your connection and try again.";
+    }
+
+    setProfile(data as NutriPathProfile);
+    notify("Your goals and daily calorie target are updated");
+    return "";
   }
 
   async function importLegacyData() {
@@ -655,7 +686,7 @@ export default function Home() {
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} />}
     </main>
   );
 }
@@ -680,6 +711,159 @@ function profileGoalLabel(goal?: NutriPathProfile["primary_goal"]) {
   if (goal === "eat_healthier") return "Eat healthier";
   if (goal === "maintain_weight") return "Maintain weight";
   return "Nutrition goal";
+}
+
+function GoalsEditor({
+  profile,
+  onBack,
+  onSave,
+}: {
+  profile: NutriPathProfile;
+  onBack: () => void;
+  onSave: (values: ProfileGoalUpdate) => Promise<string>;
+}) {
+  const initialImperialHeight = cmToImperial(profile.height_cm);
+  const [weightUnit, setWeightUnit] = useState<"kg" | "lb">(profile.weight_unit || "kg");
+  const [weight, setWeight] = useState(profile.weight_kg
+    ? String(profile.weight_unit === "lb" ? Math.round(profile.weight_kg * 2.20462 * 10) / 10 : profile.weight_kg)
+    : "");
+  const [heightUnit, setHeightUnit] = useState<"cm" | "imperial">(profile.height_unit || "cm");
+  const [heightCm, setHeightCm] = useState(profile.height_cm ? String(profile.height_cm) : "");
+  const [feet, setFeet] = useState(initialImperialHeight.feet);
+  const [inches, setInches] = useState(initialImperialHeight.inches);
+  const [goal, setGoal] = useState<Goal | "">(profile.primary_goal || "");
+  const [activity, setActivity] = useState<Activity | "">(profile.activity_level || "");
+  const [calorieGoal, setCalorieGoal] = useState(profile.calorie_goal ? String(profile.calorie_goal) : "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const normalizedWeight = useMemo(() => {
+    const value = Number(weight);
+    return weightUnit === "lb" ? value / 2.20462 : value;
+  }, [weight, weightUnit]);
+
+  const normalizedHeight = useMemo(() => {
+    if (heightUnit === "cm") return Number(heightCm);
+    return (Number(feet) * 12 + Number(inches)) * 2.54;
+  }, [heightCm, heightUnit, feet, inches]);
+
+  const suggested = useMemo(() => {
+    if (
+      !(normalizedWeight > 0)
+      || !(normalizedHeight > 0)
+      || !(Number(profile.age) >= 18)
+      || !profile.calculation_sex
+      || !activity
+      || !goal
+    ) return 0;
+    return suggestedCalories(
+      normalizedWeight,
+      normalizedHeight,
+      Number(profile.age),
+      profile.calculation_sex,
+      activity,
+      goal,
+    );
+  }, [normalizedWeight, normalizedHeight, profile.age, profile.calculation_sex, activity, goal]);
+
+  const validationError = useMemo(() => {
+    if (!(normalizedWeight >= 30 && normalizedWeight <= 350)) return "Enter a weight between 30 and 350 kg (66 and 772 lb).";
+    if (!(normalizedHeight >= 120 && normalizedHeight <= 230)) return "Enter a height between 120 and 230 cm.";
+    if (!goal) return "Select your primary goal.";
+    if (!activity) return "Select your activity level.";
+    const target = Number(calorieGoal);
+    if (!(target >= 1200 && target <= 6000)) return "Enter a daily calorie target between 1,200 and 6,000 kcal.";
+    return "";
+  }, [normalizedWeight, normalizedHeight, goal, activity, calorieGoal]);
+
+  function changeWeightUnit(nextUnit: "kg" | "lb") {
+    if (nextUnit === weightUnit) return;
+    const current = Number(weight);
+    if (current > 0) {
+      const converted = nextUnit === "lb" ? current * 2.20462 : current / 2.20462;
+      setWeight(String(Math.round(converted * 10) / 10));
+    }
+    setWeightUnit(nextUnit);
+  }
+
+  function changeHeightUnit(nextUnit: "cm" | "imperial") {
+    if (nextUnit === heightUnit) return;
+    if (nextUnit === "imperial") {
+      const converted = cmToImperial(Number(heightCm) || null);
+      setFeet(converted.feet);
+      setInches(converted.inches);
+    } else {
+      const converted = (Number(feet) * 12 + Number(inches)) * 2.54;
+      if (converted > 0) setHeightCm(String(Math.round(converted * 10) / 10));
+    }
+    setHeightUnit(nextUnit);
+  }
+
+  async function save() {
+    if (validationError || !goal || !activity) {
+      setError(validationError || "Complete every required field.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    const saveError = await onSave({
+      weight_kg: Math.round(normalizedWeight * 10) / 10,
+      height_cm: Math.round(normalizedHeight * 10) / 10,
+      weight_unit: weightUnit,
+      height_unit: heightUnit,
+      primary_goal: goal,
+      activity_level: activity,
+      suggested_calorie_goal: suggested || null,
+      calorie_goal: Number(calorieGoal),
+    });
+    setSaving(false);
+    if (saveError) {
+      setError(saveError);
+      return;
+    }
+    onBack();
+  }
+
+  return <div className="goals-editor">
+    <button className="goals-back" type="button" onClick={onBack}>‹ Profile</button>
+    <p className="eyebrow">GOALS & TARGETS</p>
+    <h2>Update your nutrition settings</h2>
+    <p className="modal-sub">Changes are saved to your account and update the dashboard immediately.</p>
+
+    <section className="goals-section">
+      <div className="goals-section-title"><strong>Weight</strong><span>Used for your calorie estimate</span></div>
+      <div className="goals-unit-row">
+        <div className="goals-unit-toggle"><button type="button" className={weightUnit === "kg" ? "active" : ""} onClick={() => changeWeightUnit("kg")}>kg</button><button type="button" className={weightUnit === "lb" ? "active" : ""} onClick={() => changeWeightUnit("lb")}>lb</button></div>
+        <label><span>Current weight</span><input type="number" inputMode="decimal" step="0.1" value={weight} onChange={event => setWeight(event.target.value)} /><small>{weightUnit}</small></label>
+      </div>
+    </section>
+
+    <section className="goals-section">
+      <div className="goals-section-title"><strong>Height and units</strong><span>Choose the system you normally use</span></div>
+      <div className="goals-unit-toggle wide"><button type="button" className={heightUnit === "cm" ? "active" : ""} onClick={() => changeHeightUnit("cm")}>Metric</button><button type="button" className={heightUnit === "imperial" ? "active" : ""} onClick={() => changeHeightUnit("imperial")}>Imperial</button></div>
+      {heightUnit === "cm"
+        ? <label className="goals-field"><span>Height</span><input type="number" inputMode="decimal" value={heightCm} onChange={event => setHeightCm(event.target.value)} /><small>cm</small></label>
+        : <div className="goals-height-row"><label><span>Feet</span><input type="number" inputMode="numeric" min="3" max="7" value={feet} onChange={event => setFeet(event.target.value)} /></label><label><span>Inches</span><input type="number" inputMode="numeric" min="0" max="11" value={inches} onChange={event => setInches(event.target.value)} /></label></div>}
+    </section>
+
+    <section className="goals-section">
+      <div className="goals-section-title"><strong>Primary goal</strong><span>Adjusts the suggested target</span></div>
+      <div className="goals-choice-grid">{(Object.keys(goalLabels) as Goal[]).map(value => <button type="button" key={value} className={goal === value ? "active" : ""} onClick={() => setGoal(value)}>{goalLabels[value]}</button>)}</div>
+    </section>
+
+    <section className="goals-section">
+      <label className="goals-select"><span>Activity level</span><select value={activity} onChange={event => setActivity(event.target.value as Activity)}><option value="">Choose your activity level</option>{(Object.keys(activityLabels) as Activity[]).map(value => <option key={value} value={value}>{activityLabels[value]}</option>)}</select></label>
+    </section>
+
+    <section className="goals-section calorie-target-editor">
+      <div className="goals-suggestion"><span>Updated estimate</span><strong>{suggested ? `${suggested.toLocaleString()} kcal` : "Complete your details"}</strong><small>Mifflin–St Jeor estimate using your stored age and calculation sex</small>{suggested > 0 && <button type="button" onClick={() => setCalorieGoal(String(suggested))}>Use suggested target</button>}</div>
+      <label className="goals-field"><span>Your daily calorie goal</span><input type="number" inputMode="numeric" min="1200" max="6000" step="10" value={calorieGoal} onChange={event => setCalorieGoal(event.target.value)} /><small>kcal</small></label>
+      <p className="goals-safety">This estimate is for general planning and is not medical advice. You can keep your own target instead of the suggestion.</p>
+    </section>
+
+    {error && <div className="auth-error" role="alert">{error}</div>}
+    <button className="primary full" type="button" disabled={saving} onClick={save}>{saving ? "Saving changes…" : "Save goals and targets"}</button>
+  </div>;
 }
 
 function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, pct, water, onMeal, onWater, onLog }: any) {
@@ -813,7 +997,7 @@ function Progress({ range, setRange, history, target }: { range: string; setRang
   </>;
 }
 
-function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, onLogout, loggingOut, savedProducts, onSaveProducts }: any) {
+function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, onLogout, loggingOut, savedProducts, onSaveProducts, onSaveProfileGoals }: any) {
   const [answers, setAnswers] = useState<string[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewIngredient[]>([]);
   const [reviewDirty, setReviewDirty] = useState(false);
@@ -1015,6 +1199,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
         <p className="fine-print">Package-label values are calculated exactly from the figures you enter. USDA values remain estimates and can vary by product and preparation. Verify ingredients, allergens and serving sizes. USDA does not endorse NutriPath.</p>
       </div>
     </>}
-    {type === "profile" && <><div className="profile-head"><div className="avatar big">{profileInitials(profile?.name)}</div><div><h2>{profile?.name || "Your profile"}</h2><p>{profileGoalLabel(profile?.primary_goal)} · {profile?.weight_unit === "lb" ? "Imperial weight" : "Metric weight"}</p></div></div><div className="modal-list settings"><button><span><strong>Goals & targets</strong><small>{Number(target || 0).toLocaleString()} kcal daily goal</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath account</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger" disabled={loggingOut} onClick={onLogout}>{loggingOut ? "Logging out…" : "Log out"}</button></>}
+    {type === "profile" && <><div className="profile-head"><div className="avatar big">{profileInitials(profile?.name)}</div><div><h2>{profile?.name || "Your profile"}</h2><p>{profileGoalLabel(profile?.primary_goal)} · {profile?.weight_unit === "lb" ? "Imperial weight" : "Metric weight"}</p></div></div><div className="modal-list settings"><button onClick={() => next("goals")}><span><strong>Goals & targets</strong><small>{Number(target || 0).toLocaleString()} kcal daily goal</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath account</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger" disabled={loggingOut} onClick={onLogout}>{loggingOut ? "Logging out…" : "Log out"}</button></>}
+    {type === "goals" && profile && <GoalsEditor profile={profile} onBack={() => next("profile")} onSave={onSaveProfileGoals} />}
   </section></div>;
 }

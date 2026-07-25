@@ -1,46 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  cmToImperial,
+  goalLabels,
+  suggestedCalories,
+  type Activity,
+  type CalculationSex,
+  type Goal,
+} from "../../lib/calorie-goal";
 import type { NutriPathProfile } from "../../lib/profile";
 import { createClient } from "../../lib/supabase/client";
 
-type Goal = NonNullable<NutriPathProfile["primary_goal"]>;
-type Activity = NonNullable<NutriPathProfile["activity_level"]>;
-type CalculationSex = NonNullable<NutriPathProfile["calculation_sex"]>;
-
 const totalSteps = 8;
-const activityFactors: Record<Activity, number> = {
-  sedentary: 1.2,
-  light: 1.375,
-  moderate: 1.55,
-  very: 1.725,
-  extra: 1.9,
-};
-
-const goalLabels: Record<Goal, string> = {
-  lose_weight: "Lose Weight",
-  build_muscle: "Build Muscle",
-  eat_healthier: "Eat Healthier",
-  maintain_weight: "Maintain Weight",
-};
-
-function suggestedCalories(weightKg: number, heightCm: number, age: number, sex: CalculationSex, activity: Activity, goal: Goal) {
-  const bmr = 10 * weightKg + 6.25 * heightCm - 5 * age + (sex === "male" ? 5 : -161);
-  const maintenance = bmr * activityFactors[activity];
-  const adjustment = goal === "lose_weight" ? -500 : goal === "build_muscle" ? 250 : 0;
-  const protectedEstimate = Math.max(bmr, maintenance + adjustment, 1200);
-  return Math.min(6000, Math.round(protectedEstimate / 10) * 10);
-}
-
-function cmToImperial(cm: number | null) {
-  if (!cm) return { feet: "", inches: "" };
-  const totalInches = cm / 2.54;
-  const wholeInches = Math.round(totalInches);
-  return {
-    feet: String(Math.floor(wholeInches / 12)),
-    inches: String(wholeInches % 12),
-  };
-}
 
 export default function OnboardingWizard({ userId, initialProfile }: { userId: string; initialProfile: NutriPathProfile | null }) {
   const imperialHeight = cmToImperial(initialProfile?.height_cm || null);
