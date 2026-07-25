@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { profileSelect, type NutriPathProfile } from "../lib/profile";
+import { createClient } from "../lib/supabase/client";
 
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
 type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string };
@@ -178,6 +180,8 @@ const navItems: { id: Tab; label: string; icon: string }[] = [
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("today");
+  const [profile, setProfile] = useState<NutriPathProfile | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [mealHistory, setMealHistory] = useState<MealHistory>({});
   const [plannedMeals, setPlannedMeals] = useState<Meal[]>([]);
   const [selectedDate, setSelectedDate] = useState("");
@@ -198,8 +202,46 @@ export default function Home() {
   const protein = totals.protein;
   const carbs = totals.carbs;
   const fat = totals.fat;
-  const target = 1850;
+  const target = Number(profile?.calorie_goal || profile?.suggested_calorie_goal || 1850);
   const pct = Math.min(100, Math.round((consumed / target) * 100));
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadProfile() {
+      const supabase = createClient();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (!active) return;
+
+      if (userError || !userData.user) {
+        window.location.replace("/auth/login");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(profileSelect)
+        .eq("user_id", userData.user.id)
+        .maybeSingle();
+
+      if (!active) return;
+      if (error) {
+        notify("Your profile could not be loaded. Please refresh and try again.");
+        return;
+      }
+      if (!data?.onboarding_completed) {
+        window.location.replace("/onboarding");
+        return;
+      }
+
+      setProfile(data as NutriPathProfile);
+    }
+
+    void loadProfile();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -236,6 +278,19 @@ export default function Home() {
   function notify(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2200);
+  }
+
+  async function logout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setLoggingOut(false);
+      notify("NutriPath could not log you out. Please try again.");
+      return;
+    }
+    window.location.replace("/auth/login");
   }
 
   function markMeal(id: number) {
@@ -371,14 +426,14 @@ export default function Home() {
         <div className="rail-nav">
           {navItems.map(item => <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}><span>{item.icon}</span>{item.label}</button>)}
         </div>
-        <div className="rail-quote"><span>“</span><p>Small choices add up. Keep going, Gabriel.</p></div>
+        <div className="rail-quote"><span>“</span><p>Small choices add up. Keep going{profile?.name ? `, ${profile.name}` : ""}.</p></div>
       </div>
 
       <section className="phone-app">
         <header className="topbar">
           <div className="mobile-brand"><Brand /></div>
           <div><p className="eyebrow">{selectedDateLabel ? selectedDateLabel.toUpperCase() : "YOUR NUTRITION"}</p><h1>{title}</h1></div>
-          <button className="avatar" aria-label="Open profile" onClick={() => setModal("profile")}>GG</button>
+          <button className="avatar" aria-label="Open profile" onClick={() => setModal("profile")}>{profileInitials(profile?.name)}</button>
         </header>
 
         <div className="content">
@@ -395,13 +450,31 @@ export default function Home() {
       </section>
 
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} onLogout={logout} loggingOut={loggingOut} />}
     </main>
   );
 }
 
 function Brand() {
   return <div className="brand"><div className="brandmark">N</div><div><strong>NutriPath</strong><small>Plan better. Track simply. Eat your way.</small></div></div>;
+}
+
+function profileInitials(name?: string | null) {
+  const initials = String(name || "NutriPath")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(part => part.charAt(0).toUpperCase())
+    .join("");
+  return initials || "NP";
+}
+
+function profileGoalLabel(goal?: NutriPathProfile["primary_goal"]) {
+  if (goal === "lose_weight") return "Lose weight";
+  if (goal === "build_muscle") return "Build muscle";
+  if (goal === "eat_healthier") return "Eat healthier";
+  if (goal === "maintain_weight") return "Maintain weight";
+  return "Nutrition goal";
 }
 
 function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, pct, water, onMeal, onWater, onLog }: any) {
@@ -535,7 +608,7 @@ function Progress({ range, setRange, history, target }: { range: string; setRang
   </>;
 }
 
-function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis }: any) {
+function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, onLogout, loggingOut }: any) {
   const [answers, setAnswers] = useState<string[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewIngredient[]>([]);
   const [reviewDirty, setReviewDirty] = useState(false);
@@ -751,6 +824,6 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
         <p className="fine-print">Package-label values are calculated exactly from the figures you enter. USDA values remain estimates and can vary by product and preparation. Verify ingredients, allergens and serving sizes. USDA does not endorse NutriPath.</p>
       </div>
     </>}
-    {type === "profile" && <><div className="profile-head"><div className="avatar big">GG</div><div><h2>Gabriel</h2><p>Weight loss · Metric units</p></div></div><div className="modal-list settings"><button><span><strong>Goals & targets</strong><small>1,850 kcal · 130g protein</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath Plus · Manage or cancel</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger">Log out</button></>}
+    {type === "profile" && <><div className="profile-head"><div className="avatar big">{profileInitials(profile?.name)}</div><div><h2>{profile?.name || "Your profile"}</h2><p>{profileGoalLabel(profile?.primary_goal)} · {profile?.weight_unit === "lb" ? "Imperial weight" : "Metric weight"}</p></div></div><div className="modal-list settings"><button><span><strong>Goals & targets</strong><small>{Number(target || 0).toLocaleString()} kcal daily goal</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath account</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger" disabled={loggingOut} onClick={onLogout}>{loggingOut ? "Logging out…" : "Log out"}</button></>}
   </section></div>;
 }
