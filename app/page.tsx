@@ -38,6 +38,7 @@ type LegacyImportData = StoredMealHistory & { savedProducts: SavedPackagedProduc
 const SAVED_PRODUCTS_KEY = "nutripath:saved-packaged-products:v1";
 const DAILY_MEALS_KEY = "nutripath:daily-meals:v1";
 const MEAL_HISTORY_KEY = "nutripath:meal-history:v2";
+const LEGACY_IMPORT_DECISION_KEY = "nutripath:legacy-import-decision:v1";
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -355,14 +356,12 @@ export default function Home() {
         notify("Cloud data is temporarily unavailable. Showing this account’s last saved copy.");
       }
 
-      if (!["imported", "skipped"].includes(loadedProfile.local_import_status)) {
+      if (loadedProfile.local_import_status !== "imported") {
         try {
           const legacy = readLegacyImportData();
-          if (hasLegacyImportData(legacy)) {
+          const importDecision = window.localStorage.getItem(userStorageKey(LEGACY_IMPORT_DECISION_KEY, userData.user.id));
+          if (hasLegacyImportData(legacy) && importDecision !== "skipped") {
             setLegacyImport(legacy);
-          } else {
-            await setLocalImportStatus(supabase, userData.user.id, "skipped");
-            setProfile(current => current ? { ...current, local_import_status: "skipped" } : current);
           }
         } catch {
           notify("NutriPath could not check this browser for older data.");
@@ -440,6 +439,7 @@ export default function Home() {
         window.localStorage.removeItem(MEAL_HISTORY_KEY);
         window.localStorage.removeItem(DAILY_MEALS_KEY);
         window.localStorage.removeItem(SAVED_PRODUCTS_KEY);
+        window.localStorage.removeItem(userStorageKey(LEGACY_IMPORT_DECISION_KEY, userId));
       } catch {
         // The cloud import succeeded even if this browser blocks local storage cleanup.
       }
@@ -456,6 +456,11 @@ export default function Home() {
     setImportingLegacy(true);
     try {
       await setLocalImportStatus(createClient(), userId, "skipped");
+      try {
+        window.localStorage.setItem(userStorageKey(LEGACY_IMPORT_DECISION_KEY, userId), "skipped");
+      } catch {
+        // The cloud status still records the user’s choice.
+      }
       setProfile(current => current ? { ...current, local_import_status: "skipped" } : current);
       setLegacyImport(null);
       notify("This account will start with its own NutriPath data.");
