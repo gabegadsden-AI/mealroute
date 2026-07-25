@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  loadCloudState,
+  setLocalImportStatus,
+  syncCloudMeals,
+  syncCloudProducts,
+} from "../lib/cloud-data";
 import { profileSelect, type NutriPathProfile } from "../lib/profile";
 import { createClient } from "../lib/supabase/client";
 
@@ -27,6 +33,7 @@ type MealReview = {
 };
 type MealHistory = Record<string, Meal[]>;
 type StoredMealHistory = { version: 2; days: MealHistory; planned: Meal[] };
+type LegacyImportData = StoredMealHistory & { savedProducts: SavedPackagedProduct[] };
 
 const SAVED_PRODUCTS_KEY = "nutripath:saved-packaged-products:v1";
 const DAILY_MEALS_KEY = "nutripath:daily-meals:v1";
@@ -72,14 +79,93 @@ function normalizeStoredHistory(raw: any): StoredMealHistory | null {
   return { version: 2, days, planned: normalizeMealList(raw.planned) };
 }
 
-function persistMealHistory(days: MealHistory, planned: Meal[]) {
+function userStorageKey(base: string, userId: string) {
+  return `${base}:user:${userId}`;
+}
+
+function readStorageJson(key: string, fallback: unknown) {
+  try {
+    return JSON.parse(window.localStorage.getItem(key) || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+}
+
+function persistMealHistory(days: MealHistory, planned: Meal[], storageKey: string) {
   try {
     const payload = JSON.stringify({ version: 2, days, planned });
-    window.localStorage.setItem(MEAL_HISTORY_KEY, payload);
-    return window.localStorage.getItem(MEAL_HISTORY_KEY) === payload;
+    window.localStorage.setItem(storageKey, payload);
+    return window.localStorage.getItem(storageKey) === payload;
   } catch {
     return false;
   }
+}
+
+function normalizeSavedProducts(raw: unknown) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(item => item?.id && item?.productName)
+    .map(item => ({
+      id: String(item.id),
+      productName: String(item.productName),
+      energyValue: nutritionValue(item.energyValue),
+      energyUnit: item.energyUnit === "kJ" ? "kJ" as const : "kcal" as const,
+      carbs: nutritionValue(item.carbs),
+      protein: nutritionValue(item.protein),
+      fat: nutritionValue(item.fat),
+      fibre: nutritionValue(item.fibre),
+      updatedAt: Number.isFinite(Number(item.updatedAt)) ? Number(item.updatedAt) : Date.now(),
+    }));
+}
+
+function readLegacyImportData(): LegacyImportData {
+  const today = localDateKey();
+  let history = normalizeStoredHistory(readStorageJson(MEAL_HISTORY_KEY, null));
+
+  if (!history) {
+    const legacy = readStorageJson(DAILY_MEALS_KEY, null) as any;
+    const legacyDate = /^\d{4}-\d{2}-\d{2}$/.test(String(legacy?.date || "")) ? String(legacy.date) : today;
+    const legacyMeals = normalizeMealList(legacy?.meals);
+    history = {
+      version: 2,
+      days: legacyMeals.length ? { [legacyDate]: legacyMeals.filter(meal => meal.type !== "Planned meal") } : {},
+      planned: legacyMeals.filter(meal => meal.type === "Planned meal"),
+    };
+  }
+
+  const savedProducts = normalizeSavedProducts(readStorageJson(SAVED_PRODUCTS_KEY, []));
+  return { ...history, savedProducts };
+}
+
+function hasLegacyImportData(data: LegacyImportData) {
+  return Object.values(data.days).some(meals => meals.length > 0)
+    || data.planned.length > 0
+    || data.savedProducts.length > 0;
+}
+
+function mergeMealLists(current: Meal[], incoming: Meal[]) {
+  const byId = new Map(current.map(meal => [meal.id, meal]));
+  incoming.forEach(meal => {
+    if (!byId.has(meal.id)) byId.set(meal.id, meal);
+  });
+  return Array.from(byId.values());
+}
+
+function mergeMealHistory(current: MealHistory, incoming: MealHistory) {
+  const merged = { ...current };
+  Object.entries(incoming).forEach(([date, meals]) => {
+    merged[date] = mergeMealLists(merged[date] || [], meals);
+  });
+  return merged;
+}
+
+function mergeSavedProducts(current: SavedPackagedProduct[], incoming: SavedPackagedProduct[]) {
+  const byId = new Map(current.map(product => [product.id, product]));
+  incoming.forEach(product => {
+    const existing = byId.get(product.id);
+    if (!existing || product.updatedAt > existing.updatedAt) byId.set(product.id, product);
+  });
+  return Array.from(byId.values()).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50);
 }
 
 function dateFromKey(key: string) {
@@ -165,13 +251,6 @@ function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
   };
 }
 
-const initialMeals: Meal[] = [
-  { id: 1, type: "Breakfast", name: "Greek yoghurt fruit bowl", calories: 380, protein: 26, carbs: 48, fat: 10, time: "8:00 AM", eaten: true, color: "berry" },
-  { id: 2, type: "Lunch", name: "Turkey avocado wrap", calories: 510, protein: 38, carbs: 44, fat: 20, time: "12:30 PM", eaten: true, locked: true, color: "wrap" },
-  { id: 3, type: "Dinner", name: "Salmon & roasted vegetables", calories: 620, protein: 46, carbs: 38, fat: 28, time: "6:30 PM", eaten: false, color: "salmon" },
-  { id: 4, type: "Snack", name: "Apple with almond butter", calories: 210, protein: 6, carbs: 24, fat: 11, time: "3:30 PM", eaten: false, color: "apple" },
-];
-
 const navItems: { id: Tab; label: string; icon: string }[] = [
   { id: "today", label: "Today", icon: "⌂" }, { id: "plan", label: "My Plan", icon: "▦" },
   { id: "log", label: "Log Food", icon: "+" }, { id: "grocery", label: "Grocery", icon: "✓" },
@@ -181,9 +260,14 @@ const navItems: { id: Tab; label: string; icon: string }[] = [
 export default function Home() {
   const [tab, setTab] = useState<Tab>("today");
   const [profile, setProfile] = useState<NutriPathProfile | null>(null);
+  const [userId, setUserId] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
   const [mealHistory, setMealHistory] = useState<MealHistory>({});
   const [plannedMeals, setPlannedMeals] = useState<Meal[]>([]);
+  const [savedProducts, setSavedProducts] = useState<SavedPackagedProduct[]>([]);
+  const [legacyImport, setLegacyImport] = useState<LegacyImportData | null>(null);
+  const [importingLegacy, setImportingLegacy] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [water, setWater] = useState(1500);
   const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile">(null);
@@ -196,7 +280,7 @@ export default function Home() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
 
-  const meals = selectedDate ? mealHistory[selectedDate] || [] : initialMeals;
+  const meals = selectedDate ? mealHistory[selectedDate] || [] : [];
   const totals = mealTotals(meals);
   const consumed = totals.calories;
   const protein = totals.protein;
@@ -208,7 +292,7 @@ export default function Home() {
   useEffect(() => {
     let active = true;
 
-    async function loadProfile() {
+    async function loadAccount() {
       const supabase = createClient();
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (!active) return;
@@ -234,50 +318,152 @@ export default function Home() {
         return;
       }
 
-      setProfile(data as NutriPathProfile);
+      const loadedProfile = data as NutriPathProfile;
+      const today = localDateKey();
+      const historyCacheKey = userStorageKey(MEAL_HISTORY_KEY, userData.user.id);
+      const productsCacheKey = userStorageKey(SAVED_PRODUCTS_KEY, userData.user.id);
+
+      setProfile(loadedProfile);
+      setUserId(userData.user.id);
+      setSelectedDate(today);
+
+      try {
+        const cloud = await loadCloudState(supabase, userData.user.id);
+        if (!active) return;
+        const cloudDays = cloud.days as MealHistory;
+        if (!cloudDays[today]) cloudDays[today] = [];
+        const cloudPlan = cloud.planned as Meal[];
+        const cloudProducts = cloud.savedProducts as SavedPackagedProduct[];
+        setMealHistory(cloudDays);
+        setPlannedMeals(cloudPlan);
+        setSavedProducts(cloudProducts);
+        persistMealHistory(cloudDays, cloudPlan, historyCacheKey);
+        try {
+          window.localStorage.setItem(productsCacheKey, JSON.stringify(cloudProducts));
+        } catch {
+          // Supabase remains the source of truth when browser storage is unavailable.
+        }
+      } catch {
+        if (!active) return;
+        const cachedHistory = normalizeStoredHistory(readStorageJson(historyCacheKey, null));
+        const cachedProducts = normalizeSavedProducts(readStorageJson(productsCacheKey, []));
+        const cachedDays = cachedHistory?.days || { [today]: [] };
+        if (!cachedDays[today]) cachedDays[today] = [];
+        setMealHistory(cachedDays);
+        setPlannedMeals(cachedHistory?.planned || []);
+        setSavedProducts(cachedProducts);
+        notify("Cloud data is temporarily unavailable. Showing this account’s last saved copy.");
+      }
+
+      if (!["imported", "skipped"].includes(loadedProfile.local_import_status)) {
+        try {
+          const legacy = readLegacyImportData();
+          if (hasLegacyImportData(legacy)) {
+            setLegacyImport(legacy);
+          } else {
+            await setLocalImportStatus(supabase, userData.user.id, "skipped");
+            setProfile(current => current ? { ...current, local_import_status: "skipped" } : current);
+          }
+        } catch {
+          notify("NutriPath could not check this browser for older data.");
+        }
+      }
+
+      if (active) setDataReady(true);
     }
 
-    void loadProfile();
+    void loadAccount();
     return () => {
       active = false;
     };
   }, []);
 
-  useEffect(() => {
-    try {
-      const today = localDateKey();
-      const storedHistory = normalizeStoredHistory(JSON.parse(window.localStorage.getItem(MEAL_HISTORY_KEY) || "null"));
-      if (storedHistory) {
-        setMealHistory(storedHistory.days);
-        setPlannedMeals(storedHistory.planned);
-        setSelectedDate(today);
-        return;
-      }
-
-      const legacy = JSON.parse(window.localStorage.getItem(DAILY_MEALS_KEY) || "null");
-      const legacyDate = /^\d{4}-\d{2}-\d{2}$/.test(String(legacy?.date || "")) ? String(legacy.date) : today;
-      const legacyMeals = normalizeMealList(legacy?.meals);
-      const migratedPlan = legacyMeals.filter(meal => meal.type === "Planned meal");
-      const migratedDay = legacyMeals.filter(meal => meal.type !== "Planned meal");
-      const days: MealHistory = legacyMeals.length ? { [legacyDate]: migratedDay } : { [today]: initialMeals };
-      if (!days[today]) days[today] = [];
-      if (persistMealHistory(days, migratedPlan)) window.localStorage.removeItem(DAILY_MEALS_KEY);
-      setMealHistory(days);
-      setPlannedMeals(migratedPlan);
-      setSelectedDate(today);
-    } catch {
-      const today = localDateKey();
-      const days = { [today]: initialMeals };
-      setMealHistory(days);
-      setPlannedMeals([]);
-      setSelectedDate(today);
-      persistMealHistory(days, []);
-    }
-  }, []);
-
   function notify(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2200);
+  }
+
+  async function saveMealState(days: MealHistory, planned: Meal[], successMessage: string) {
+    if (!userId) {
+      notify("Your account is still loading. Please try again.");
+      return false;
+    }
+    const cacheSaved = persistMealHistory(days, planned, userStorageKey(MEAL_HISTORY_KEY, userId));
+    try {
+      await syncCloudMeals(createClient(), userId, days, planned);
+      notify(successMessage);
+      return true;
+    } catch {
+      notify(cacheSaved
+        ? "Saved on this device. NutriPath will need another update to sync it to your account."
+        : "This change could not be saved. Please check your connection and try again.");
+      return false;
+    }
+  }
+
+  async function saveProductState(products: SavedPackagedProduct[]) {
+    if (!userId) return;
+    try {
+      window.localStorage.setItem(userStorageKey(SAVED_PRODUCTS_KEY, userId), JSON.stringify(products));
+    } catch {
+      // Supabase remains the source of truth when browser storage is unavailable.
+    }
+    try {
+      await syncCloudProducts(createClient(), userId, products);
+    } catch {
+      notify("The nutrition label was kept on this device, but account sync needs another update.");
+    }
+  }
+
+  async function importLegacyData() {
+    if (!userId || !legacyImport || importingLegacy) return;
+    setImportingLegacy(true);
+    const mergedDays = mergeMealHistory(mealHistory, legacyImport.days);
+    const mergedPlan = mergeMealLists(plannedMeals, legacyImport.planned);
+    const mergedProducts = mergeSavedProducts(savedProducts, legacyImport.savedProducts);
+    const supabase = createClient();
+
+    try {
+      await Promise.all([
+        syncCloudMeals(supabase, userId, mergedDays, mergedPlan),
+        syncCloudProducts(supabase, userId, mergedProducts),
+      ]);
+      await setLocalImportStatus(supabase, userId, "imported");
+      setMealHistory(mergedDays);
+      setPlannedMeals(mergedPlan);
+      setSavedProducts(mergedProducts);
+      setProfile(current => current ? { ...current, local_import_status: "imported" } : current);
+      setLegacyImport(null);
+      persistMealHistory(mergedDays, mergedPlan, userStorageKey(MEAL_HISTORY_KEY, userId));
+      try {
+        window.localStorage.setItem(userStorageKey(SAVED_PRODUCTS_KEY, userId), JSON.stringify(mergedProducts));
+        window.localStorage.removeItem(MEAL_HISTORY_KEY);
+        window.localStorage.removeItem(DAILY_MEALS_KEY);
+        window.localStorage.removeItem(SAVED_PRODUCTS_KEY);
+      } catch {
+        // The cloud import succeeded even if this browser blocks local storage cleanup.
+      }
+      notify("Your earlier NutriPath data is now saved to this account.");
+    } catch {
+      notify("Your earlier data could not be imported. Nothing was removed; please try again.");
+    } finally {
+      setImportingLegacy(false);
+    }
+  }
+
+  async function skipLegacyImport() {
+    if (!userId || importingLegacy) return;
+    setImportingLegacy(true);
+    try {
+      await setLocalImportStatus(createClient(), userId, "skipped");
+      setProfile(current => current ? { ...current, local_import_status: "skipped" } : current);
+      setLegacyImport(null);
+      notify("This account will start with its own NutriPath data.");
+    } catch {
+      notify("NutriPath could not save that choice. Please try again.");
+    } finally {
+      setImportingLegacy(false);
+    }
   }
 
   async function logout() {
@@ -293,18 +479,18 @@ export default function Home() {
     window.location.replace("/auth/login");
   }
 
-  function markMeal(id: number) {
+  async function markMeal(id: number) {
     const date = selectedDate || localDateKey();
     const nextMeals = (mealHistory[date] || []).map(meal => meal.id === id ? { ...meal, eaten: !meal.eaten } : meal);
     const nextHistory = { ...mealHistory, [date]: nextMeals };
     setMealHistory(nextHistory);
-    notify(persistMealHistory(nextHistory, plannedMeals) ? "This day’s progress updated and saved" : "Progress updated, but browser storage is unavailable");
+    await saveMealState(nextHistory, plannedMeals, "This day’s progress is saved to your account");
   }
 
-  function markPlannedMeal(id: number) {
+  async function markPlannedMeal(id: number) {
     const nextPlan = plannedMeals.map(meal => meal.id === id ? { ...meal, eaten: !meal.eaten } : meal);
     setPlannedMeals(nextPlan);
-    notify(persistMealHistory(mealHistory, nextPlan) ? "Planned meal updated and saved" : "Plan updated, but browser storage is unavailable");
+    await saveMealState(mealHistory, nextPlan, "Your planned meal is saved to your account");
   }
 
   function addWater(amount: number) {
@@ -388,7 +574,7 @@ export default function Home() {
     }
   }
 
-  function addAnalyzedMeal(destination: "today" | "plan" = "today") {
+  async function addAnalyzedMeal(destination: "today" | "plan" = "today") {
     if (!analysis) return;
     const nextMeal = {
       id: Date.now(), type: destination === "today" ? "Logged meal" : "Planned meal", name: analysis.mealName,
@@ -396,27 +582,28 @@ export default function Home() {
       time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       eaten: destination === "today", color: "salmon",
     };
-    let saved = false;
+    let savePromise: Promise<boolean>;
     if (destination === "today") {
       const today = localDateKey();
       const nextHistory = { ...mealHistory, [today]: [...(mealHistory[today] || []), nextMeal] };
       setMealHistory(nextHistory);
       setSelectedDate(today);
-      saved = persistMealHistory(nextHistory, plannedMeals);
+      savePromise = saveMealState(nextHistory, plannedMeals, `${analysis.mealName} logged and saved to your account`);
     } else {
       const nextPlan = [...plannedMeals, nextMeal];
       setPlannedMeals(nextPlan);
-      saved = persistMealHistory(mealHistory, nextPlan);
+      savePromise = saveMealState(mealHistory, nextPlan, `${analysis.mealName} added to your plan and saved`);
     }
     setModal(null);
     setTab(destination);
-    notify(saved
-      ? destination === "today" ? `${analysis.mealName} logged and saved on this device` : `${analysis.mealName} added to your plan and saved`
-      : "Meal added, but browser storage is unavailable");
+    await savePromise;
   }
 
   const selectedDateLabel = selectedDate ? dateFromKey(selectedDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }) : "";
   const title = tab === "today" ? !selectedDate || selectedDate === localDateKey() ? "Today" : selectedDateLabel : tab === "plan" ? "My Plan" : tab === "log" ? "Log Food" : tab === "grocery" ? "Grocery List" : "History";
+  const legacyMealCount = legacyImport
+    ? Object.values(legacyImport.days).reduce((count, dayMeals) => count + dayMeals.length, 0) + legacyImport.planned.length
+    : 0;
 
   return (
     <main className="app-shell">
@@ -437,11 +624,15 @@ export default function Home() {
         </header>
 
         <div className="content">
-          {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
-          {tab === "plan" && <Plan meals={plannedMeals} onMeal={markPlannedMeal} notify={notify} />}
-          {tab === "log" && <Log onPhoto={usePhoto} notify={notify} />}
-          {tab === "grocery" && <Grocery checked={grocery} setChecked={setGrocery} notify={notify} />}
-          {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} />}
+          {!dataReady
+            ? <div className="history-empty"><strong>Loading your NutriPath account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
+            : <>
+              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
+              {tab === "plan" && <Plan meals={plannedMeals} onMeal={markPlannedMeal} notify={notify} />}
+              {tab === "log" && <Log onPhoto={usePhoto} notify={notify} />}
+              {tab === "grocery" && <Grocery checked={grocery} setChecked={setGrocery} notify={notify} />}
+              {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} />}
+            </>}
         </div>
 
         <nav className="bottom-nav" aria-label="Main navigation">
@@ -450,7 +641,16 @@ export default function Home() {
       </section>
 
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} onLogout={logout} loggingOut={loggingOut} />}
+      {legacyImport && <div className="modal-backdrop"><section className="modal-sheet">
+        <div className="modal-icon">↥</div>
+        <p className="eyebrow">ONE-TIME IMPORT</p>
+        <h2>Bring your earlier NutriPath data into this account?</h2>
+        <p className="modal-sub">This browser contains {legacyMealCount} {legacyMealCount === 1 ? "meal or plan" : "meals or plans"} and {legacyImport.savedProducts.length} saved {legacyImport.savedProducts.length === 1 ? "product" : "products"}. Importing saves them under this signed-in account without duplicating existing records.</p>
+        <div className="connection-notice"><b>Your account stays private</b><span>After import, this data is protected by your Supabase user ID and will not be shown to other NutriPath accounts.</span></div>
+        <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
+        <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
+      </section></div>}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} />}
     </main>
   );
 }
@@ -604,28 +804,18 @@ function Progress({ range, setRange, history, target }: { range: string; setRang
     <section className="weekly-win"><div className="spark">✦</div><div><p className="eyebrow">MEAL HISTORY</p><h2>{trackedDays.length ? `${trackedDays.length} ${trackedDays.length === 1 ? "day" : "days"} tracked.` : "Your history starts here."}</h2><p>{trackedDays.length ? `${loggedMeals} meals are saved in this ${range.toLowerCase()} view.` : "Log your first meal and NutriPath will build your calorie and macro history."}</p></div></section>
     <section className="stats-grid"><div><span>Days logged</span><strong>{trackedDays.length}</strong><small>of {rangeDays} days</small></div><div><span>Avg. calories</span><strong>{averageCalories.toLocaleString()}</strong><small>{averageCalories ? `${Math.abs(target - averageCalories).toLocaleString()} ${averageCalories <= target ? "below" : "above"} target` : "No entries yet"}</small></div><div><span>Protein target</span><strong>{proteinTargetDays}/{trackedDays.length || 0}</strong><small>tracked days reached</small></div><div><span>Meals logged</span><strong>{loggedMeals}</strong><small>confirmed as eaten</small></div></section>
     <section className="chart-card"><div className="section-heading"><div><p className="eyebrow">LAST 7 DAYS</p><h2>Calories by day</h2></div><span>{target.toLocaleString()} goal</span></div><div className="chart"><div className="goal-line"><span>Goal</span></div>{chartDays.map(day => <div className="bar-wrap" key={day.key}><div className={day.key === (today ? localDateKey(today) : "") ? "bar active" : "bar"} style={{ height: `${Math.max(8, Math.min(110, day.value / 20))}px` }}><span>{day.value || "–"}</span></div><small>{day.day}</small></div>)}</div></section>
-    <section className="weight-card"><div><p className="eyebrow">HISTORY STATUS</p><h2>{trackedDays.length} saved {trackedDays.length === 1 ? "day" : "days"}</h2><span>Stored on this browser and restored after refresh.</span></div><div className="weight-line"><i /><b /><em /></div></section>
+    <section className="weight-card"><div><p className="eyebrow">HISTORY STATUS</p><h2>{trackedDays.length} saved {trackedDays.length === 1 ? "day" : "days"}</h2><span>Saved to your NutriPath account and restored after sign-in.</span></div><div className="weight-line"><i /><b /><em /></div></section>
   </>;
 }
 
-function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, onLogout, loggingOut }: any) {
+function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, onLogout, loggingOut, savedProducts, onSaveProducts }: any) {
   const [answers, setAnswers] = useState<string[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewIngredient[]>([]);
   const [reviewDirty, setReviewDirty] = useState(false);
   const [fixingResult, setFixingResult] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [confirmedUpdate, setConfirmedUpdate] = useState(false);
-  const [savedProducts, setSavedProducts] = useState<SavedPackagedProduct[]>([]);
   const confirmedReviewRef = useRef<ReviewIngredient[] | null>(null);
-
-  useEffect(() => {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(SAVED_PRODUCTS_KEY) || "[]");
-      if (Array.isArray(parsed)) setSavedProducts(parsed.filter(item => item?.id && item?.productName));
-    } catch {
-      setSavedProducts([]);
-    }
-  }, []);
 
   useEffect(() => {
     if (type !== "result" || !analysis) return;
@@ -662,16 +852,12 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
       } satisfies SavedPackagedProduct;
     });
     if (!labels.length) return;
-    setSavedProducts(current => {
-      const next = [...current];
-      labels.forEach(label => {
-        const index = next.findIndex(item => item.id === label.id);
-        if (index >= 0) next[index] = label; else next.unshift(label);
-      });
-      const limited = next.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50);
-      window.localStorage.setItem(SAVED_PRODUCTS_KEY, JSON.stringify(limited));
-      return limited;
+    const next: SavedPackagedProduct[] = [...(savedProducts as SavedPackagedProduct[])];
+    labels.forEach(label => {
+      const index = next.findIndex((item: SavedPackagedProduct) => item.id === label.id);
+      if (index >= 0) next[index] = label; else next.unshift(label);
     });
+    onSaveProducts(next.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50));
   }
 
   function updateReviewName(index: number, value: string) {
@@ -686,7 +872,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
   }
 
   function selectSavedProduct(index: number, productId: string) {
-    const product = savedProducts.find(item => item.id === productId);
+    const product = (savedProducts as SavedPackagedProduct[]).find(item => item.id === productId);
     if (!product) return;
     setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? {
       ...item,
@@ -796,7 +982,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
             {fixingResult && editingIndex === index && <div className="ingredient-inline-editor">
               <label><span>Food</span><input value={ingredient.name} onChange={event => updateReviewName(index, event.target.value)} placeholder="Food name" /></label>
               <label><span>Grams</span><input type="number" inputMode="numeric" min="1" max="5000" step="1" value={ingredient.amountGrams} onChange={event => updateReviewGrams(index, event.target.value)} placeholder="120" /><small className="gram-unit">g</small></label>
-              {savedProducts.length > 0 && <label className="saved-product-picker"><span>Saved packaged product</span><select value="" onChange={event => selectSavedProduct(index, event.target.value)}><option value="">Choose a saved product</option>{savedProducts.map(product => <option key={product.id} value={product.id}>{product.productName}</option>)}</select><small>Loads the saved per-100 g label values. You only need to confirm the portion grams.</small></label>}
+              {savedProducts.length > 0 && <label className="saved-product-picker"><span>Saved packaged product</span><select value="" onChange={event => selectSavedProduct(index, event.target.value)}><option value="">Choose a saved product</option>{(savedProducts as SavedPackagedProduct[]).map(product => <option key={product.id} value={product.id}>{product.productName}</option>)}</select><small>Loads the saved per-100 g label values. You only need to confirm the portion grams.</small></label>}
               <label className="package-label-toggle"><input type="checkbox" checked={Boolean(ingredient.labelNutrition)} onChange={event => togglePackageLabel(index, event.target.checked)} /><span>Use package nutrition label</span></label>
               {ingredient.labelNutrition && <div className="package-label-fields">
                 <div className="package-label-heading"><strong>Required values per 100 g</strong><small>Type every figure exactly as printed on the package.</small></div>
