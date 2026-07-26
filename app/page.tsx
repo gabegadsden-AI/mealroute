@@ -15,6 +15,12 @@ import {
   type Activity,
   type Goal,
 } from "../lib/calorie-goal";
+import {
+  macroCalories,
+  macroPercentages,
+  suggestedMacroTargets,
+  type MacroTargets,
+} from "../lib/macro-targets";
 import { profileSelect, type NutriPathProfile } from "../lib/profile";
 import { createClient } from "../lib/supabase/client";
 
@@ -45,6 +51,10 @@ type LegacyImportData = StoredMealHistory & { savedProducts: SavedPackagedProduc
 type ProfileGoalUpdate = Pick<
   NutriPathProfile,
   "weight_kg" | "height_cm" | "weight_unit" | "height_unit" | "primary_goal" | "activity_level" | "calorie_goal" | "suggested_calorie_goal"
+>;
+type ProfileMacroUpdate = Pick<
+  NutriPathProfile,
+  "protein_goal_g" | "carbs_goal_g" | "fat_goal_g" | "macro_targets_custom"
 >;
 
 const SAVED_PRODUCTS_KEY = "nutripath:saved-packaged-products:v1";
@@ -283,7 +293,7 @@ export default function Home() {
   const [importingLegacy, setImportingLegacy] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [water, setWater] = useState(1500);
-  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals">(null);
+  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros">(null);
   const [toast, setToast] = useState("");
   const [grocery, setGrocery] = useState<Record<string, boolean>>({ "Greek yoghurt": true, "Blueberries": true });
   const [range, setRange] = useState("Week");
@@ -300,6 +310,28 @@ export default function Home() {
   const carbs = totals.carbs;
   const fat = totals.fat;
   const target = Number(profile?.calorie_goal || profile?.suggested_calorie_goal || 1850);
+  const suggestedMacros = useMemo(
+    () => suggestedMacroTargets(target, profile?.primary_goal || null),
+    [target, profile?.primary_goal],
+  );
+  const macroTargets = useMemo<MacroTargets>(() => {
+    if (
+      profile?.macro_targets_custom
+      && profile.protein_goal_g !== null
+      && profile.carbs_goal_g !== null
+      && profile.fat_goal_g !== null
+      && Number(profile.protein_goal_g) >= 0
+      && Number(profile.carbs_goal_g) >= 0
+      && Number(profile.fat_goal_g) >= 0
+    ) {
+      return {
+        protein: Number(profile.protein_goal_g),
+        carbs: Number(profile.carbs_goal_g),
+        fat: Number(profile.fat_goal_g),
+      };
+    }
+    return suggestedMacros;
+  }, [profile?.macro_targets_custom, profile?.protein_goal_g, profile?.carbs_goal_g, profile?.fat_goal_g, suggestedMacros]);
   const pct = Math.min(100, Math.round((consumed / target) * 100));
 
   useEffect(() => {
@@ -442,6 +474,25 @@ export default function Home() {
 
     setProfile(data as NutriPathProfile);
     notify("Your goals and daily calorie target are updated");
+    return "";
+  }
+
+  async function saveProfileMacros(values: ProfileMacroUpdate) {
+    if (!userId) return "Your account is still loading. Please try again.";
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(values)
+      .eq("user_id", userId)
+      .select(profileSelect)
+      .single();
+
+    if (error || !data) {
+      return "Your macro targets could not be saved. Please check your connection and try again.";
+    }
+
+    setProfile(data as NutriPathProfile);
+    notify("Your protein, carbohydrate, and fat targets are updated");
     return "";
   }
 
@@ -663,11 +714,11 @@ export default function Home() {
           {!dataReady
             ? <div className="history-empty"><strong>Loading your NutriPath account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
             : <>
-              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
+              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
               {tab === "plan" && <Plan meals={plannedMeals} onMeal={markPlannedMeal} notify={notify} />}
               {tab === "log" && <Log onPhoto={usePhoto} notify={notify} />}
               {tab === "grocery" && <Grocery checked={grocery} setChecked={setGrocery} notify={notify} />}
-              {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} />}
+              {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} />}
             </>}
         </div>
 
@@ -686,7 +737,7 @@ export default function Home() {
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} />}
     </main>
   );
 }
@@ -866,7 +917,118 @@ function GoalsEditor({
   </div>;
 }
 
-function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, pct, water, onMeal, onWater, onLog }: any) {
+function MacroTargetsEditor({
+  profile,
+  calorieGoal,
+  currentTargets,
+  onBack,
+  onSave,
+}: {
+  profile: NutriPathProfile;
+  calorieGoal: number;
+  currentTargets: MacroTargets;
+  onBack: () => void;
+  onSave: (values: ProfileMacroUpdate) => Promise<string>;
+}) {
+  const suggested = useMemo(
+    () => suggestedMacroTargets(calorieGoal, profile.primary_goal),
+    [calorieGoal, profile.primary_goal],
+  );
+  const [protein, setProtein] = useState(String(currentTargets.protein));
+  const [carbs, setCarbs] = useState(String(currentTargets.carbs));
+  const [fat, setFat] = useState(String(currentTargets.fat));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const targets = useMemo<MacroTargets>(() => {
+    const values = [protein, carbs, fat].map(value => Number(value));
+    return {
+      protein: Number.isFinite(values[0]) ? values[0] : 0,
+      carbs: Number.isFinite(values[1]) ? values[1] : 0,
+      fat: Number.isFinite(values[2]) ? values[2] : 0,
+    };
+  }, [protein, carbs, fat]);
+  const caloriesFromMacros = macroCalories(targets);
+  const percentages = macroPercentages(targets);
+  const calorieDifference = caloriesFromMacros - calorieGoal;
+  const outsideGeneralRange = percentages.protein < 10
+    || percentages.protein > 35
+    || percentages.carbs < 45
+    || percentages.carbs > 65
+    || percentages.fat < 20
+    || percentages.fat > 35;
+
+  const validationError = useMemo(() => {
+    if (!(targets.protein >= 20 && targets.protein <= 500)) return "Enter a protein target between 20 and 500 g.";
+    if (!(targets.carbs >= 20 && targets.carbs <= 800)) return "Enter a carbohydrate target between 20 and 800 g.";
+    if (!(targets.fat >= 10 && targets.fat <= 300)) return "Enter a fat target between 10 and 300 g.";
+    return "";
+  }, [targets]);
+
+  function useSuggestion() {
+    setProtein(String(suggested.protein));
+    setCarbs(String(suggested.carbs));
+    setFat(String(suggested.fat));
+    setError("");
+  }
+
+  async function save() {
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    const usesCustomTargets = targets.protein !== suggested.protein
+      || targets.carbs !== suggested.carbs
+      || targets.fat !== suggested.fat;
+    const saveError = await onSave({
+      protein_goal_g: Math.round(targets.protein * 10) / 10,
+      carbs_goal_g: Math.round(targets.carbs * 10) / 10,
+      fat_goal_g: Math.round(targets.fat * 10) / 10,
+      macro_targets_custom: usesCustomTargets,
+    });
+    setSaving(false);
+    if (saveError) {
+      setError(saveError);
+      return;
+    }
+    onBack();
+  }
+
+  return <div className="goals-editor macro-targets-editor">
+    <button className="goals-back" type="button" onClick={onBack}>‹ Profile</button>
+    <p className="eyebrow">MACRO TARGETS</p>
+    <h2>Set your daily macros</h2>
+    <p className="modal-sub">NutriPath converts your {calorieGoal.toLocaleString()} kcal target into a general starting estimate. You can adjust each value.</p>
+
+    <section className="goals-section macro-suggested-section">
+      <div className="goals-section-title"><strong>Suggested starting point</strong><span>Based on your calorie target and {profileGoalLabel(profile.primary_goal).toLowerCase()} goal</span></div>
+      <div className="macro-suggested-grid"><div><span>Protein</span><strong>{suggested.protein}g</strong></div><div><span>Carbs</span><strong>{suggested.carbs}g</strong></div><div><span>Fat</span><strong>{suggested.fat}g</strong></div></div>
+      <button className="macro-use-suggestion" type="button" onClick={useSuggestion}>Use suggested targets</button>
+    </section>
+
+    <section className="goals-section macro-input-grid">
+      <label><span>Protein</span><input type="number" inputMode="decimal" min="20" max="500" step="1" value={protein} onChange={event => setProtein(event.target.value)} /><small>g</small></label>
+      <label><span>Carbohydrates</span><input type="number" inputMode="decimal" min="20" max="800" step="1" value={carbs} onChange={event => setCarbs(event.target.value)} /><small>g</small></label>
+      <label><span>Fat</span><input type="number" inputMode="decimal" min="10" max="300" step="1" value={fat} onChange={event => setFat(event.target.value)} /><small>g</small></label>
+    </section>
+
+    <section className="macro-balance-card">
+      <div><span>Calories represented by macros</span><strong>{caloriesFromMacros.toLocaleString()} kcal</strong></div>
+      <small className={Math.abs(calorieDifference) <= 25 ? "balanced" : ""}>{calorieDifference === 0 ? "Matches your calorie goal" : `${Math.abs(calorieDifference).toLocaleString()} kcal ${calorieDifference > 0 ? "above" : "below"} your goal`}</small>
+      <div className="macro-percent-row"><span>Protein {percentages.protein}%</span><span>Carbs {percentages.carbs}%</span><span>Fat {percentages.fat}%</span></div>
+    </section>
+
+    {outsideGeneralRange && <div className="connection-notice"><b>Custom distribution</b><span>One or more targets fall outside the general adult AMDR ranges. NutriPath will save your choice, but consider checking it with a qualified health professional.</span></div>}
+    <p className="goals-safety">General adult reference ranges: protein 10–35%, carbohydrates 45–65%, and fat 20–35% of calories. Carbohydrate and protein use 4 kcal/g; fat uses 9 kcal/g. <a href="https://nap.nationalacademies.org/skim.php?chap=936-967&record_id=10490" target="_blank" rel="noreferrer">National Academies reference</a>.</p>
+
+    {error && <div className="auth-error" role="alert">{error}</div>}
+    <button className="primary full" type="button" disabled={saving} onClick={save}>{saving ? "Saving targets…" : "Save macro targets"}</button>
+  </div>;
+}
+
+function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, onMeal, onWater, onLog }: any) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const dates = today ? Array.from({ length: 7 }, (_, index) => {
@@ -894,9 +1056,9 @@ function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fa
         <i><b style={{ width: `${pct}%` }} /></i>
       </div>
       <div className="daily-macro-grid">
-        <MacroGoal kind="carbs" label="Carbs" value={carbs} goal={200} />
-        <MacroGoal kind="protein" label="Protein" value={protein} goal={130} />
-        <MacroGoal kind="fat" label="Fat" value={fat} goal={65} />
+        <MacroGoal kind="carbs" label="Carbs" value={carbs} goal={macroTargets.carbs} />
+        <MacroGoal kind="protein" label="Protein" value={protein} goal={macroTargets.protein} />
+        <MacroGoal kind="fat" label="Fat" value={fat} goal={macroTargets.fat} />
       </div>
       <div className="overview-actions"><button className="scan-meal" onClick={onLog}><span>＋</span><b>Scan or log meal</b></button><button onClick={onWater}><span>♢</span><b>{(water / 1000).toFixed(1)}L water</b></button></div>
     </section>
@@ -908,7 +1070,7 @@ function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fa
         : <div className="history-empty"><strong>No meals logged for this date.</strong><span>Select another day or log a meal for today.</span><button onClick={onLog}>Log today’s meal</button></div>}
     </section>
 
-    <section className="insight-card"><div className="spark">✦</div><div><p className="eyebrow">TODAY’S INSIGHT</p><strong>You have {Math.max(0, 130 - protein)}g of protein remaining.</strong><p>Your planned meals can help close the gap.</p></div></section>
+    <section className="insight-card"><div className="spark">✦</div><div><p className="eyebrow">TODAY’S INSIGHT</p><strong>You have {Math.max(0, Math.round(macroTargets.protein - protein))}g of protein remaining.</strong><p>Your planned meals can help close the gap.</p></div></section>
   </>;
 }
 
@@ -968,7 +1130,7 @@ function Grocery({ checked, setChecked, notify }: any) {
   </>;
 }
 
-function Progress({ range, setRange, history, target }: { range: string; setRange: (s: string) => void; history: MealHistory; target: number }) {
+function Progress({ range, setRange, history, target, proteinTarget }: { range: string; setRange: (s: string) => void; history: MealHistory; target: number; proteinTarget: number }) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const rangeDays = range === "Week" ? 7 : range === "Month" ? 30 : 90;
@@ -981,7 +1143,7 @@ function Progress({ range, setRange, history, target }: { range: string; setRang
   const trackedDays = periodTotals.filter(day => day.count > 0);
   const totalCalories = trackedDays.reduce((sum, day) => sum + day.calories, 0);
   const averageCalories = trackedDays.length ? Math.round(totalCalories / trackedDays.length) : 0;
-  const proteinTargetDays = trackedDays.filter(day => day.protein >= 130).length;
+  const proteinTargetDays = trackedDays.filter(day => day.protein >= proteinTarget).length;
   const loggedMeals = trackedDays.reduce((sum, day) => sum + day.count, 0);
   const chartDays = periodTotals.slice(-7).map(day => ({
     key: day.date,
@@ -997,7 +1159,7 @@ function Progress({ range, setRange, history, target }: { range: string; setRang
   </>;
 }
 
-function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, onLogout, loggingOut, savedProducts, onSaveProducts, onSaveProfileGoals }: any) {
+function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, macroTargets, onLogout, loggingOut, savedProducts, onSaveProducts, onSaveProfileGoals, onSaveProfileMacros }: any) {
   const [answers, setAnswers] = useState<string[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewIngredient[]>([]);
   const [reviewDirty, setReviewDirty] = useState(false);
@@ -1199,7 +1361,8 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
         <p className="fine-print">Package-label values are calculated exactly from the figures you enter. USDA values remain estimates and can vary by product and preparation. Verify ingredients, allergens and serving sizes. USDA does not endorse NutriPath.</p>
       </div>
     </>}
-    {type === "profile" && <><div className="profile-head"><div className="avatar big">{profileInitials(profile?.name)}</div><div><h2>{profile?.name || "Your profile"}</h2><p>{profileGoalLabel(profile?.primary_goal)} · {profile?.weight_unit === "lb" ? "Imperial weight" : "Metric weight"}</p></div></div><div className="modal-list settings"><button onClick={() => next("goals")}><span><strong>Goals & targets</strong><small>{Number(target || 0).toLocaleString()} kcal daily goal</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath account</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger" disabled={loggingOut} onClick={onLogout}>{loggingOut ? "Logging out…" : "Log out"}</button></>}
+    {type === "profile" && <><div className="profile-head"><div className="avatar big">{profileInitials(profile?.name)}</div><div><h2>{profile?.name || "Your profile"}</h2><p>{profileGoalLabel(profile?.primary_goal)} · {profile?.weight_unit === "lb" ? "Imperial weight" : "Metric weight"}</p></div></div><div className="modal-list settings"><button onClick={() => next("goals")}><span><strong>Goals & targets</strong><small>{Number(target || 0).toLocaleString()} kcal daily goal</small></span><b>›</b></button><button onClick={() => next("macros")}><span><strong>Macro targets</strong><small>{macroTargets.protein}g protein · {macroTargets.carbs}g carbs · {macroTargets.fat}g fat</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath account</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger" disabled={loggingOut} onClick={onLogout}>{loggingOut ? "Logging out…" : "Log out"}</button></>}
     {type === "goals" && profile && <GoalsEditor profile={profile} onBack={() => next("profile")} onSave={onSaveProfileGoals} />}
+    {type === "macros" && profile && <MacroTargetsEditor profile={profile} calorieGoal={target} currentTargets={macroTargets} onBack={() => next("profile")} onSave={onSaveProfileMacros} />}
   </section></div>;
 }
