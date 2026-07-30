@@ -23,6 +23,14 @@ import {
 } from "../lib/macro-targets";
 import { profileSelect, type NutriPathProfile } from "../lib/profile";
 import { createClient } from "../lib/supabase/client";
+import {
+  loadWeightLogs,
+  removeWeightLog,
+  upsertWeightLog,
+  weightInUnit,
+  weightToKg,
+  type WeightLog,
+} from "../lib/weight-progress";
 
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
 type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string };
@@ -56,6 +64,10 @@ type ProfileMacroUpdate = Pick<
   NutriPathProfile,
   "protein_goal_g" | "carbs_goal_g" | "fat_goal_g" | "macro_targets_custom"
 >;
+type WeightSaveResult = {
+  error: string;
+  profileUpdated: boolean;
+};
 
 const SAVED_PRODUCTS_KEY = "nutripath:saved-packaged-products:v1";
 const DAILY_MEALS_KEY = "nutripath:daily-meals:v1";
@@ -289,11 +301,12 @@ export default function Home() {
   const [mealHistory, setMealHistory] = useState<MealHistory>({});
   const [plannedMeals, setPlannedMeals] = useState<Meal[]>([]);
   const [savedProducts, setSavedProducts] = useState<SavedPackagedProduct[]>([]);
+  const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
   const [legacyImport, setLegacyImport] = useState<LegacyImportData | null>(null);
   const [importingLegacy, setImportingLegacy] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [water, setWater] = useState(1500);
-  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros">(null);
+  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros" | "weight">(null);
   const [toast, setToast] = useState("");
   const [grocery, setGrocery] = useState<Record<string, boolean>>({ "Greek yoghurt": true, "Blueberries": true });
   const [range, setRange] = useState("Week");
@@ -400,6 +413,15 @@ export default function Home() {
         notify("Cloud data is temporarily unavailable. Showing this account’s last saved copy.");
       }
 
+      try {
+        const cloudWeightLogs = await loadWeightLogs(supabase, userData.user.id);
+        if (!active) return;
+        setWeightLogs(cloudWeightLogs);
+      } catch {
+        if (!active) return;
+        notify("Weight history could not be loaded. Your meals and targets are still available.");
+      }
+
       if (loadedProfile.local_import_status !== "imported") {
         try {
           const legacy = readLegacyImportData();
@@ -494,6 +516,71 @@ export default function Home() {
     setProfile(data as NutriPathProfile);
     notify("Your protein, carbohydrate, and fat targets are updated");
     return "";
+  }
+
+  async function saveWeightEntry(loggedOn: string, weightKg: number): Promise<WeightSaveResult> {
+    if (!userId) {
+      return { error: "Your account is still loading. Please try again.", profileUpdated: false };
+    }
+
+    try {
+      const supabase = createClient();
+      const saved = await upsertWeightLog(supabase, userId, loggedOn, weightKg);
+      const nextLogs = [...weightLogs.filter(log => log.logged_on !== saved.logged_on), saved]
+        .sort((a, b) => a.logged_on.localeCompare(b.logged_on));
+      setWeightLogs(nextLogs);
+
+      const latest = nextLogs[nextLogs.length - 1];
+      let profileUpdated = false;
+      if (latest?.id === saved.id) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .update({ weight_kg: latest.weight_kg })
+          .eq("user_id", userId)
+          .select(profileSelect)
+          .single();
+
+        if (!error && data) {
+          setProfile(data as NutriPathProfile);
+          profileUpdated = true;
+        }
+      }
+
+      notify("Weight saved to your account");
+      return { error: "", profileUpdated };
+    } catch {
+      return {
+        error: "Your weight could not be saved. Check your connection and try again.",
+        profileUpdated: false,
+      };
+    }
+  }
+
+  async function deleteWeightEntry(logId: string) {
+    if (!userId) return "Your account is still loading. Please try again.";
+
+    try {
+      const supabase = createClient();
+      await removeWeightLog(supabase, userId, logId);
+      const nextLogs = weightLogs.filter(log => log.id !== logId);
+      setWeightLogs(nextLogs);
+
+      const latest = nextLogs[nextLogs.length - 1];
+      if (latest) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .update({ weight_kg: latest.weight_kg })
+          .eq("user_id", userId)
+          .select(profileSelect)
+          .single();
+        if (!error && data) setProfile(data as NutriPathProfile);
+      }
+
+      notify("Weight entry removed");
+      return "";
+    } catch {
+      return "This weight entry could not be removed. Please try again.";
+    }
   }
 
   async function importLegacyData() {
@@ -718,7 +805,7 @@ export default function Home() {
               {tab === "plan" && <Plan meals={plannedMeals} onMeal={markPlannedMeal} notify={notify} />}
               {tab === "log" && <Log onPhoto={usePhoto} notify={notify} />}
               {tab === "grocery" && <Grocery checked={grocery} setChecked={setGrocery} notify={notify} />}
-              {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} />}
+              {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />}
             </>}
         </div>
 
@@ -737,7 +824,7 @@ export default function Home() {
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} />}
     </main>
   );
 }
@@ -1130,7 +1217,25 @@ function Grocery({ checked, setChecked, notify }: any) {
   </>;
 }
 
-function Progress({ range, setRange, history, target, proteinTarget }: { range: string; setRange: (s: string) => void; history: MealHistory; target: number; proteinTarget: number }) {
+function Progress({
+  range,
+  setRange,
+  history,
+  target,
+  proteinTarget,
+  weightLogs,
+  weightUnit,
+  onLogWeight,
+}: {
+  range: string;
+  setRange: (s: string) => void;
+  history: MealHistory;
+  target: number;
+  proteinTarget: number;
+  weightLogs: WeightLog[];
+  weightUnit: "kg" | "lb";
+  onLogWeight: () => void;
+}) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const rangeDays = range === "Week" ? 7 : range === "Month" ? 30 : 90;
@@ -1150,16 +1255,163 @@ function Progress({ range, setRange, history, target, proteinTarget }: { range: 
     day: dateFromKey(day.date).toLocaleDateString([], { weekday: "short" }),
     value: day.calories,
   }));
+  const firstPeriodDate = periodDates[0] || "";
+  const lastPeriodDate = periodDates[periodDates.length - 1] || "";
+  const periodWeightLogs = weightLogs
+    .filter(log => log.logged_on >= firstPeriodDate && log.logged_on <= lastPeriodDate)
+    .sort((a, b) => a.logged_on.localeCompare(b.logged_on));
+  const displayWeights = periodWeightLogs.map(log => weightInUnit(log.weight_kg, weightUnit));
+  const firstWeight = displayWeights[0];
+  const latestWeight = displayWeights[displayWeights.length - 1];
+  const weightChange = displayWeights.length > 1 ? Math.round((latestWeight - firstWeight) * 10) / 10 : 0;
+  const weightTrend = displayWeights.length < 2
+    ? "Add another measurement to see a trend"
+    : weightChange === 0
+      ? `No change in this ${range.toLowerCase()} view`
+      : `${Math.abs(weightChange).toFixed(1)} ${weightUnit} ${weightChange < 0 ? "down" : "up"}`;
+  const chartMin = displayWeights.length ? Math.min(...displayWeights) : 0;
+  const chartMax = displayWeights.length ? Math.max(...displayWeights) : 0;
+  const chartSpread = Math.max(0.5, chartMax - chartMin);
+  const weightPoints = displayWeights.map((value, index) => {
+    const x = displayWeights.length === 1 ? 150 : 12 + (index / (displayWeights.length - 1)) * 276;
+    const y = 100 - ((value - chartMin) / chartSpread) * 78;
+    return { x, y, value, log: periodWeightLogs[index] };
+  });
   return <>
     <div className="segment">{["Week", "Month", "3 months"].map(x => <button key={x} className={range === x ? "active" : ""} onClick={() => setRange(x)}>{x}</button>)}</div>
     <section className="weekly-win"><div className="spark">✦</div><div><p className="eyebrow">MEAL HISTORY</p><h2>{trackedDays.length ? `${trackedDays.length} ${trackedDays.length === 1 ? "day" : "days"} tracked.` : "Your history starts here."}</h2><p>{trackedDays.length ? `${loggedMeals} meals are saved in this ${range.toLowerCase()} view.` : "Log your first meal and NutriPath will build your calorie and macro history."}</p></div></section>
     <section className="stats-grid"><div><span>Days logged</span><strong>{trackedDays.length}</strong><small>of {rangeDays} days</small></div><div><span>Avg. calories</span><strong>{averageCalories.toLocaleString()}</strong><small>{averageCalories ? `${Math.abs(target - averageCalories).toLocaleString()} ${averageCalories <= target ? "below" : "above"} target` : "No entries yet"}</small></div><div><span>Protein target</span><strong>{proteinTargetDays}/{trackedDays.length || 0}</strong><small>tracked days reached</small></div><div><span>Meals logged</span><strong>{loggedMeals}</strong><small>confirmed as eaten</small></div></section>
     <section className="chart-card"><div className="section-heading"><div><p className="eyebrow">LAST 7 DAYS</p><h2>Calories by day</h2></div><span>{target.toLocaleString()} goal</span></div><div className="chart"><div className="goal-line"><span>Goal</span></div>{chartDays.map(day => <div className="bar-wrap" key={day.key}><div className={day.key === (today ? localDateKey(today) : "") ? "bar active" : "bar"} style={{ height: `${Math.max(8, Math.min(110, day.value / 20))}px` }}><span>{day.value || "–"}</span></div><small>{day.day}</small></div>)}</div></section>
-    <section className="weight-card"><div><p className="eyebrow">HISTORY STATUS</p><h2>{trackedDays.length} saved {trackedDays.length === 1 ? "day" : "days"}</h2><span>Saved to your NutriPath account and restored after sign-in.</span></div><div className="weight-line"><i /><b /><em /></div></section>
+    <section className="weight-progress-card">
+      <div className="weight-progress-head">
+        <div><p className="eyebrow">WEIGHT PROGRESS</p><h2>{periodWeightLogs.length ? `${latestWeight.toFixed(1)} ${weightUnit}` : "No weight logged"}</h2><span>{weightTrend}</span></div>
+        <button type="button" onClick={onLogWeight}>＋ Log weight</button>
+      </div>
+      {weightPoints.length
+        ? <>
+          <div className="weight-chart" role="img" aria-label={`Weight trend with ${weightPoints.length} measurements`}>
+            <svg viewBox="0 0 300 120" preserveAspectRatio="none">
+              <line x1="12" y1="100" x2="288" y2="100" className="weight-chart-axis" />
+              {weightPoints.length > 1 && <polyline points={weightPoints.map(point => `${point.x},${point.y}`).join(" ")} className="weight-chart-line" />}
+              {weightPoints.map(point => <g key={point.log.id}><circle cx={point.x} cy={point.y} r="5" className="weight-chart-point" /><text x={point.x} y={Math.max(12, point.y - 10)} textAnchor="middle">{point.value.toFixed(1)}</text></g>)}
+            </svg>
+          </div>
+          <div className="weight-chart-dates"><span>{dateFromKey(periodWeightLogs[0].logged_on).toLocaleDateString([], { day: "numeric", month: "short" })}</span><span>{dateFromKey(periodWeightLogs[periodWeightLogs.length - 1].logged_on).toLocaleDateString([], { day: "numeric", month: "short" })}</span></div>
+        </>
+        : <div className="weight-empty"><span>Log a measurement to start your private weight history.</span><small>NutriPath stores it under your signed-in account.</small></div>}
+    </section>
   </>;
 }
 
-function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, macroTargets, onLogout, loggingOut, savedProducts, onSaveProducts, onSaveProfileGoals, onSaveProfileMacros }: any) {
+function WeightProgressEditor({
+  profile,
+  logs,
+  onBack,
+  onReviewGoals,
+  onSave,
+  onDelete,
+}: {
+  profile: NutriPathProfile;
+  logs: WeightLog[];
+  onBack: () => void;
+  onReviewGoals: () => void;
+  onSave: (loggedOn: string, weightKg: number) => Promise<WeightSaveResult>;
+  onDelete: (logId: string) => Promise<string>;
+}) {
+  const unit = profile.weight_unit || "kg";
+  const today = localDateKey();
+  const latestLog = [...logs].sort((a, b) => b.logged_on.localeCompare(a.logged_on))[0];
+  const startingWeightKg = latestLog?.weight_kg || Number(profile.weight_kg || 0);
+  const [loggedOn, setLoggedOn] = useState(today);
+  const [weight, setWeight] = useState(startingWeightKg ? String(weightInUnit(startingWeightKg, unit)) : "");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [profileUpdated, setProfileUpdated] = useState(false);
+
+  function selectDate(nextDate: string) {
+    setLoggedOn(nextDate);
+    const existing = logs.find(log => log.logged_on === nextDate);
+    setWeight(existing ? String(weightInUnit(existing.weight_kg, unit)) : "");
+    setSaved(false);
+    setError("");
+  }
+
+  async function submitWeight(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    setError("");
+    setSaved(false);
+
+    const enteredWeight = Number(weight);
+    const weightKg = weightToKg(enteredWeight, unit);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(loggedOn) || loggedOn > today) {
+      setError("Choose today or an earlier date.");
+      return;
+    }
+    if (!Number.isFinite(enteredWeight) || weightKg < 30 || weightKg > 350) {
+      setError(`Enter a weight between ${unit === "lb" ? "66 and 772 lb" : "30 and 350 kg"}.`);
+      return;
+    }
+
+    setSaving(true);
+    const result = await onSave(loggedOn, weightKg);
+    setSaving(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setProfileUpdated(result.profileUpdated);
+    setSaved(true);
+  }
+
+  async function deleteEntry(log: WeightLog) {
+    if (deletingId || !window.confirm(`Remove the weight recorded on ${dateFromKey(log.logged_on).toLocaleDateString()}?`)) return;
+    setDeletingId(log.id);
+    setError("");
+    const deleteError = await onDelete(log.id);
+    setDeletingId("");
+    if (deleteError) {
+      setError(deleteError);
+      return;
+    }
+    if (log.logged_on === loggedOn) setWeight("");
+    setSaved(false);
+  }
+
+  const recentLogs = [...logs].sort((a, b) => b.logged_on.localeCompare(a.logged_on)).slice(0, 8);
+  return <div className="weight-editor">
+    <button className="goals-back" type="button" onClick={onBack}>‹ Profile</button>
+    <p className="eyebrow">WEIGHT PROGRESS</p>
+    <h2>Log your weight</h2>
+    <p className="modal-sub">NutriPath uses your preferred {unit} display and securely stores the underlying measurement in kilograms.</p>
+
+    <form className="weight-entry-form" onSubmit={submitWeight}>
+      <label><span>Date</span><input type="date" value={loggedOn} max={today} onChange={event => selectDate(event.target.value)} /></label>
+      <label><span>Weight</span><input type="number" inputMode="decimal" min={unit === "lb" ? "66" : "30"} max={unit === "lb" ? "772" : "350"} step="0.1" value={weight} onChange={event => { setWeight(event.target.value); setSaved(false); }} /><small>{unit}</small></label>
+      <button className="primary full" type="submit" disabled={saving}>{saving ? "Saving weight…" : logs.some(log => log.logged_on === loggedOn) ? "Update weight" : "Save weight"}</button>
+    </form>
+
+    {error && <div className="auth-error">{error}</div>}
+    {saved && <div className="weight-saved">
+      <strong>Weight saved</strong>
+      <span>{profileUpdated ? "Your profile now uses this as your current weight." : "This measurement was added to your history. Your latest profile weight remains unchanged."}</span>
+      <b>Your calorie and macro targets were not changed.</b>
+      <div><button type="button" onClick={onBack}>Keep current targets</button><button type="button" onClick={onReviewGoals}>Review goals</button></div>
+    </div>}
+
+    <section className="weight-history-list">
+      <div className="goals-section-title"><strong>Recent measurements</strong><span>One measurement is saved per date</span></div>
+      {recentLogs.length
+        ? recentLogs.map(log => <div key={log.id}><span>{dateFromKey(log.logged_on).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</span><strong>{weightInUnit(log.weight_kg, unit).toFixed(1)} {unit}</strong><button type="button" disabled={deletingId === log.id} onClick={() => deleteEntry(log)}>{deletingId === log.id ? "Removing…" : "Remove"}</button></div>)
+        : <p>No measurements saved yet.</p>}
+    </section>
+    <p className="goals-safety">Weight changes can affect suggested targets. NutriPath always asks before you review or change calorie and macro targets.</p>
+  </div>;
+}
+
+function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, macroTargets, onLogout, loggingOut, savedProducts, onSaveProducts, onSaveProfileGoals, onSaveProfileMacros, weightLogs, onSaveWeight, onDeleteWeight }: any) {
   const [answers, setAnswers] = useState<string[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewIngredient[]>([]);
   const [reviewDirty, setReviewDirty] = useState(false);
@@ -1361,7 +1613,8 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
         <p className="fine-print">Package-label values are calculated exactly from the figures you enter. USDA values remain estimates and can vary by product and preparation. Verify ingredients, allergens and serving sizes. USDA does not endorse NutriPath.</p>
       </div>
     </>}
-    {type === "profile" && <><div className="profile-head"><div className="avatar big">{profileInitials(profile?.name)}</div><div><h2>{profile?.name || "Your profile"}</h2><p>{profileGoalLabel(profile?.primary_goal)} · {profile?.weight_unit === "lb" ? "Imperial weight" : "Metric weight"}</p></div></div><div className="modal-list settings"><button onClick={() => next("goals")}><span><strong>Goals & targets</strong><small>{Number(target || 0).toLocaleString()} kcal daily goal</small></span><b>›</b></button><button onClick={() => next("macros")}><span><strong>Macro targets</strong><small>{macroTargets.protein}g protein · {macroTargets.carbs}g carbs · {macroTargets.fat}g fat</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath account</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger" disabled={loggingOut} onClick={onLogout}>{loggingOut ? "Logging out…" : "Log out"}</button></>}
+    {type === "profile" && <><div className="profile-head"><div className="avatar big">{profileInitials(profile?.name)}</div><div><h2>{profile?.name || "Your profile"}</h2><p>{profileGoalLabel(profile?.primary_goal)} · {profile?.weight_unit === "lb" ? "Imperial weight" : "Metric weight"}</p></div></div><div className="modal-list settings"><button onClick={() => next("weight")}><span><strong>Weight progress</strong><small>{weightLogs.length ? `${weightInUnit(weightLogs[weightLogs.length - 1].weight_kg, profile?.weight_unit || "kg").toFixed(1)} ${profile?.weight_unit || "kg"} · ${weightLogs.length} saved ${weightLogs.length === 1 ? "entry" : "entries"}` : "Log weight and review trends"}</small></span><b>›</b></button><button onClick={() => next("goals")}><span><strong>Goals & targets</strong><small>{Number(target || 0).toLocaleString()} kcal daily goal</small></span><b>›</b></button><button onClick={() => next("macros")}><span><strong>Macro targets</strong><small>{macroTargets.protein}g protein · {macroTargets.carbs}g carbs · {macroTargets.fat}g fat</small></span><b>›</b></button><button><span><strong>Dietary preferences</strong><small>No declared allergies</small></span><b>›</b></button><button><span><strong>Notifications</strong><small>All reminders off</small></span><b>›</b></button><button><span><strong>Subscription</strong><small>NutriPath account</small></span><b>›</b></button><button><span><strong>Privacy & your data</strong><small>Export or delete account</small></span><b>›</b></button></div><button className="text-button danger" disabled={loggingOut} onClick={onLogout}>{loggingOut ? "Logging out…" : "Log out"}</button></>}
+    {type === "weight" && profile && <WeightProgressEditor profile={profile} logs={weightLogs} onBack={() => next("profile")} onReviewGoals={() => next("goals")} onSave={onSaveWeight} onDelete={onDeleteWeight} />}
     {type === "goals" && profile && <GoalsEditor profile={profile} onBack={() => next("profile")} onSave={onSaveProfileGoals} />}
     {type === "macros" && profile && <MacroTargetsEditor profile={profile} calorieGoal={target} currentTargets={macroTargets} onBack={() => next("profile")} onSave={onSaveProfileMacros} />}
   </section></div>;
