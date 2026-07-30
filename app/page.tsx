@@ -29,6 +29,17 @@ import {
   saveRecentFood,
   type ManualFoodItem,
 } from "../lib/manual-food";
+import {
+  createCustomGroceryItem,
+  deleteCustomGroceryItem,
+  reconcilePlannedGroceryItems,
+  setGroceryItemChecked,
+  sortGroceryItems,
+  type GroceryCategory,
+  type GroceryItem,
+  type GroceryUnit,
+  type PlannedIngredient,
+} from "../lib/grocery-list";
 import { profileSelect, type NutriPathProfile } from "../lib/profile";
 import { createClient } from "../lib/supabase/client";
 import {
@@ -41,7 +52,7 @@ import {
 } from "../lib/weight-progress";
 
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
-type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string };
+type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string; ingredients?: PlannedIngredient[] };
 type LabelNutrition = { productName: string; energyValue: number; energyUnit: "kcal" | "kJ"; carbs: number; protein: number; fat: number; fibre: number };
 type SavedPackagedProduct = LabelNutrition & { id: string; updatedAt: number };
 type LabelNutritionDraft = Omit<LabelNutrition, "energyValue" | "carbs" | "protein" | "fat" | "fibre"> & { energyValue: number | ""; carbs: number | ""; protein: number | ""; fat: number | ""; fibre: number | "" };
@@ -105,7 +116,18 @@ function normalizeStoredMeal(raw: any): Meal | null {
     eaten: Boolean(raw.eaten),
     locked: raw.locked ? true : undefined,
     color: String(raw.color || "salmon"),
+    ingredients: normalizeStoredIngredients(raw.ingredients),
   };
+}
+
+function normalizeStoredIngredients(raw: unknown): PlannedIngredient[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item: any) => ({
+      name: String(item?.name || "").replace(/\s+/g, " ").trim().slice(0, 160),
+      amountGrams: nutritionValue(item?.amountGrams),
+    }))
+    .filter(item => item.name && item.amountGrams > 0 && item.amountGrams <= 5000);
 }
 
 function normalizeMealList(raw: unknown) {
@@ -319,7 +341,8 @@ export default function Home() {
   const [manualStartMode, setManualStartMode] = useState<"search" | "saved" | "custom">("search");
   const [manualInitialFood, setManualInitialFood] = useState<ManualFoodItem | null>(null);
   const [toast, setToast] = useState("");
-  const [grocery, setGrocery] = useState<Record<string, boolean>>({ "Greek yoghurt": true, "Blueberries": true });
+  const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
+  const [groceryReady, setGroceryReady] = useState(false);
   const [range, setRange] = useState("Week");
   const [uploadedPhoto, setUploadedPhoto] = useState<string | null>(null);
   const [uploadedData, setUploadedData] = useState<string | null>(null);
@@ -406,6 +429,16 @@ export default function Home() {
         setMealHistory(cloudDays);
         setPlannedMeals(cloudPlan);
         setSavedProducts(cloudProducts);
+        try {
+          const accountGrocery = await reconcilePlannedGroceryItems(supabase, userData.user.id, cloudPlan);
+          if (!active) return;
+          setGroceryItems(accountGrocery);
+        } catch {
+          if (!active) return;
+          notify("Your grocery list could not be loaded. Your meals and plan are still available.");
+        } finally {
+          if (active) setGroceryReady(true);
+        }
         persistMealHistory(cloudDays, cloudPlan, historyCacheKey);
         try {
           window.localStorage.setItem(productsCacheKey, JSON.stringify(cloudProducts));
@@ -421,6 +454,7 @@ export default function Home() {
         setMealHistory(cachedDays);
         setPlannedMeals(cachedHistory?.planned || []);
         setSavedProducts(cachedProducts);
+        setGroceryReady(true);
         notify("Cloud data is temporarily unavailable. Showing this account’s last saved copy.");
       }
 
@@ -483,6 +517,80 @@ export default function Home() {
         ? "Saved on this device. NutriPath will need another update to sync it to your account."
         : "This change could not be saved. Please check your connection and try again.");
       return false;
+    }
+  }
+
+  async function refreshGroceryForPlan(planned: Meal[]) {
+    if (!userId) return false;
+    try {
+      const items = await reconcilePlannedGroceryItems(createClient(), userId, planned);
+      setGroceryItems(items);
+      setGroceryReady(true);
+      return true;
+    } catch {
+      notify("Your plan was saved, but the grocery list could not be refreshed.");
+      return false;
+    }
+  }
+
+  async function toggleGroceryItem(itemKey: string) {
+    if (!userId) return;
+    const current = groceryItems.find(item => item.itemKey === itemKey);
+    if (!current) return;
+    const nextChecked = !current.checked;
+    setGroceryItems(items => items.map(item => item.itemKey === itemKey ? { ...item, checked: nextChecked } : item));
+    try {
+      await setGroceryItemChecked(createClient(), userId, itemKey, nextChecked);
+    } catch {
+      setGroceryItems(items => items.map(item => item.itemKey === itemKey ? { ...item, checked: current.checked } : item));
+      notify("That grocery change could not be saved. Please try again.");
+    }
+  }
+
+  async function addCustomGroceryItem(values: {
+    name: string;
+    quantity: number;
+    unit: GroceryUnit;
+    category: GroceryCategory;
+  }) {
+    if (!userId) return "Your account is still loading. Please try again.";
+    const name = values.name.replace(/\s+/g, " ").trim();
+    if (!name) return "Enter an item name.";
+    if (name.length > 160) return "Keep the grocery item name under 160 characters.";
+    if (!Number.isFinite(values.quantity) || values.quantity <= 0 || values.quantity > 100000) {
+      return "Enter a quantity greater than zero.";
+    }
+
+    const item: GroceryItem = {
+      itemKey: `custom:${crypto.randomUUID()}`,
+      name,
+      quantity: Math.round((values.quantity + Number.EPSILON) * 10) / 10,
+      unit: values.unit,
+      category: values.category,
+      sourceType: "custom",
+      checked: false,
+    };
+    try {
+      const saved = await createCustomGroceryItem(createClient(), userId, item);
+      setGroceryItems(items => sortGroceryItems([...items, saved]));
+      notify(`${saved.name} added to your grocery list`);
+      return "";
+    } catch {
+      return "This grocery item could not be saved. Please try again.";
+    }
+  }
+
+  async function removeCustomGroceryItem(itemKey: string) {
+    if (!userId) return;
+    const existing = groceryItems.find(item => item.itemKey === itemKey && item.sourceType === "custom");
+    if (!existing) return;
+    setGroceryItems(items => items.filter(item => item.itemKey !== itemKey));
+    try {
+      await deleteCustomGroceryItem(createClient(), userId, itemKey);
+      notify(`${existing.name} removed`);
+    } catch {
+      setGroceryItems(items => sortGroceryItems([...items, existing]));
+      notify("That grocery item could not be removed. Please try again.");
     }
   }
 
@@ -620,6 +728,7 @@ export default function Home() {
       setMealHistory(mergedDays);
       setPlannedMeals(mergedPlan);
       setSavedProducts(mergedProducts);
+      await refreshGroceryForPlan(mergedPlan);
       setProfile(current => current ? { ...current, local_import_status: "imported" } : current);
       setLegacyImport(null);
       persistMealHistory(mergedDays, mergedPlan, userStorageKey(MEAL_HISTORY_KEY, userId));
@@ -799,6 +908,7 @@ export default function Home() {
       time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       eaten: destination === "today",
       color: "wrap",
+      ingredients: [{ name: food.name, amountGrams: nutrition.grams }],
     };
 
     let mealSaved: boolean;
@@ -812,6 +922,7 @@ export default function Home() {
       const nextPlan = [...plannedMeals, nextMeal];
       setPlannedMeals(nextPlan);
       mealSaved = await saveMealState(mealHistory, nextPlan, `${food.name} added to My Plan with ${nutrition.grams}g`);
+      if (mealSaved) await refreshGroceryForPlan(nextPlan);
     }
 
     if (mealSaved) {
@@ -840,8 +951,12 @@ export default function Home() {
       calories: analysis.calories.best, protein: analysis.protein, carbs: analysis.carbs, fat: analysis.fat,
       time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       eaten: destination === "today", color: "salmon",
+      ingredients: analysis.ingredients
+        .filter(ingredient => ingredient.name.trim() && ingredient.amountGrams > 0)
+        .map(ingredient => ({ name: ingredient.name.trim(), amountGrams: ingredient.amountGrams })),
     };
     let savePromise: Promise<boolean>;
+    let nextPlannedMeals: Meal[] | null = null;
     if (destination === "today") {
       const today = localDateKey();
       const nextHistory = { ...mealHistory, [today]: [...(mealHistory[today] || []), nextMeal] };
@@ -851,11 +966,13 @@ export default function Home() {
     } else {
       const nextPlan = [...plannedMeals, nextMeal];
       setPlannedMeals(nextPlan);
+      nextPlannedMeals = nextPlan;
       savePromise = saveMealState(mealHistory, nextPlan, `${analysis.mealName} added to your plan and saved`);
     }
     setModal(null);
     setTab(destination);
-    await savePromise;
+    const mealSaved = await savePromise;
+    if (mealSaved && nextPlannedMeals) await refreshGroceryForPlan(nextPlannedMeals);
   }
 
   const selectedDateLabel = selectedDate ? dateFromKey(selectedDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }) : "";
@@ -887,9 +1004,9 @@ export default function Home() {
             ? <div className="history-empty"><strong>Loading your NutriPath account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
             : <>
               {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
-              {tab === "plan" && <Plan meals={plannedMeals} onMeal={markPlannedMeal} notify={notify} />}
+              {tab === "plan" && <Plan meals={plannedMeals} onMeal={markPlannedMeal} notify={notify} onReviewGrocery={() => setTab("grocery")} />}
               {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} onManual={openManualFood} />}
-              {tab === "grocery" && <Grocery checked={grocery} setChecked={setGrocery} notify={notify} />}
+              {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
               {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />}
             </>}
         </div>
@@ -1258,7 +1375,7 @@ function MealCard({ meal, onMeal }: { meal: Meal; onMeal: (id: number) => void }
   </article>;
 }
 
-function Plan({ meals, onMeal, notify }: { meals: Meal[]; onMeal: (id: number) => void; notify: (s: string) => void }) {
+function Plan({ meals, onMeal, notify, onReviewGrocery }: { meals: Meal[]; onMeal: (id: number) => void; notify: (s: string) => void; onReviewGrocery: () => void }) {
   const plannedCalories = meals.reduce((sum, meal) => sum + meal.calories, 0);
   return <>
     <section className="plan-summary"><div><p className="eyebrow">SAVED MEAL PLAN</p><h2>{meals.length} {meals.length === 1 ? "meal" : "meals"} · {plannedCalories.toLocaleString()} kcal</h2><p>Planned meals stay here across different days until you decide to use or replace them.</p></div><button onClick={() => notify("Plan options opened")}>•••</button></section>
@@ -1266,7 +1383,7 @@ function Plan({ meals, onMeal, notify }: { meals: Meal[]; onMeal: (id: number) =
     {meals.length > 0
       ? <div className="meal-list plan-list">{meals.map(m => <div key={m.id} className="plan-meal"><MealCard meal={m} onMeal={onMeal} /><div className="plan-actions"><button onClick={() => notify("3 similar alternatives ready")}>Replace</button><button onClick={() => notify("Portion editor opened")}>Edit portion</button><button onClick={() => notify(m.locked ? "Meal unlocked" : "Meal locked")}>{m.locked ? "Unlock" : "Lock"}</button></div></div>)}</div>
       : <div className="history-empty"><strong>No meals in your plan yet.</strong><span>Analyze a meal and select Add to plan.</span></div>}
-    <button className="wide-button" onClick={() => notify("Grocery list is up to date")}>Review grocery list <span>→</span></button>
+    <button className="wide-button" onClick={onReviewGrocery}>Review grocery list <span>→</span></button>
   </>;
 }
 
@@ -1303,15 +1420,105 @@ function Log({
   </>;
 }
 
-function Grocery({ checked, setChecked, notify }: any) {
-  const groups: Record<string, string[]> = { Produce: ["Blueberries", "Apples", "Avocados", "Baby spinach", "Broccoli", "Capsicums"], "Meat & seafood": ["Chicken breast · 750g pack", "Salmon fillets · 4 pack", "Turkey slices · 300g"], "Dairy & eggs": ["Greek yoghurt", "Eggs · 12 pack", "Feta cheese"], Pantry: ["Brown rice · 1kg", "Black beans · 2 cans", "Almond butter", "Olive oil"] };
-  const all = Object.values(groups).flat(); const count = all.filter(x => checked[x]).length;
+function Grocery({
+  items,
+  ready,
+  onToggle,
+  onAddCustom,
+  onRemoveCustom,
+  onOpenPlan,
+}: {
+  items: GroceryItem[];
+  ready: boolean;
+  onToggle: (itemKey: string) => Promise<void>;
+  onAddCustom: (values: { name: string; quantity: number; unit: GroceryUnit; category: GroceryCategory }) => Promise<string>;
+  onRemoveCustom: (itemKey: string) => Promise<void>;
+  onOpenPlan: () => void;
+}) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [hideChecked, setHideChecked] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customQuantity, setCustomQuantity] = useState("1");
+  const [customUnit, setCustomUnit] = useState<GroceryUnit>("item");
+  const [customCategory, setCustomCategory] = useState<GroceryCategory>("Other");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const checkedCount = items.filter(item => item.checked).length;
+  const percent = items.length ? Math.round(checkedCount / items.length * 100) : 0;
+  const visibleItems = hideChecked ? items.filter(item => !item.checked) : items;
+  const categoryOrder: GroceryCategory[] = ["Produce", "Meat & seafood", "Dairy & eggs", "Pantry", "Other"];
+  const groups = categoryOrder
+    .map(category => ({ category, items: visibleItems.filter(item => item.category === category) }))
+    .filter(group => group.items.length);
+
+  async function submitCustomItem(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    const saveError = await onAddCustom({
+      name: customName,
+      quantity: Number(customQuantity),
+      unit: customUnit,
+      category: customCategory,
+    });
+    setSaving(false);
+    if (saveError) {
+      setError(saveError);
+      return;
+    }
+    setCustomName("");
+    setCustomQuantity("1");
+    setCustomUnit("item");
+    setCustomCategory("Other");
+    setShowAdd(false);
+  }
+
+  if (!ready) {
+    return <div className="history-empty"><strong>Building your grocery list…</strong><span>NutriPath is combining ingredients from My Plan and restoring your saved checkmarks.</span></div>;
+  }
+
   return <>
-    <section className="grocery-head"><div className="grocery-icon">✓</div><div><p className="eyebrow">11–17 JULY</p><h2>{all.length} items for your plan</h2><p>{count} checked · Quantities combined into practical sizes.</p></div></section>
-    <div className="grocery-progress"><i><b style={{ width: `${count / all.length * 100}%` }} /></i><span>{Math.round(count / all.length * 100)}%</span></div>
-    {Object.entries(groups).map(([group, items]) => <section className="grocery-group" key={group}><div><h3>{group}</h3><span>{items.filter(x => checked[x]).length}/{items.length}</span></div>{items.map(item => <label key={item} className={checked[item] ? "checked" : ""}><input type="checkbox" checked={!!checked[item]} onChange={() => setChecked((v: any) => ({ ...v, [item]: !v[item] }))} /><i>{checked[item] ? "✓" : ""}</i><span>{item}</span><button onClick={e => { e.preventDefault(); notify(`${item} marked as already owned`); }}>•••</button></label>)}</section>)}
-    <button className="wide-button subtle" onClick={() => notify("Owned items hidden")}>Remove anything you already have</button>
+    <section className="grocery-head"><div className="grocery-icon">✓</div><div><p className="eyebrow">FROM MY PLAN</p><h2>{items.length} {items.length === 1 ? "item" : "items"} on your list</h2><p>{checkedCount} checked · Repeated planned ingredients are combined.</p></div></section>
+    <div className="grocery-progress"><i><b style={{ width: `${percent}%` }} /></i><span>{percent}%</span></div>
+
+    <div className="grocery-toolbar">
+      <button type="button" className={showAdd ? "active" : ""} onClick={() => { setShowAdd(value => !value); setError(""); }}>＋ Add item</button>
+      <button type="button" disabled={!checkedCount} onClick={() => setHideChecked(value => !value)}>{hideChecked ? "Show checked" : "Hide checked"}</button>
+    </div>
+
+    {showAdd && <form className="grocery-add-form" onSubmit={submitCustomItem}>
+      <label className="grocery-name"><span>Item</span><input value={customName} onChange={event => setCustomName(event.target.value)} placeholder="Example: Sparkling water" maxLength={160} /></label>
+      <label><span>Quantity</span><input type="number" inputMode="decimal" min="0.1" max="100000" step="0.1" value={customQuantity} onChange={event => setCustomQuantity(event.target.value)} /></label>
+      <label><span>Unit</span><select value={customUnit} onChange={event => setCustomUnit(event.target.value as GroceryUnit)}><option value="item">item</option><option value="g">g</option></select></label>
+      <label><span>Category</span><select value={customCategory} onChange={event => setCustomCategory(event.target.value as GroceryCategory)}>{categoryOrder.map(category => <option key={category}>{category}</option>)}</select></label>
+      {error && <div className="auth-error">{error}</div>}
+      <button className="primary full" type="submit" disabled={saving}>{saving ? "Saving…" : "Save grocery item"}</button>
+    </form>}
+
+    {groups.map(group => <section className="grocery-group" key={group.category}>
+      <div><h3>{group.category}</h3><span>{group.items.filter(item => item.checked).length}/{group.items.length}</span></div>
+      {group.items.map(item => <div className={`grocery-row ${item.checked ? "checked" : ""}`} key={item.itemKey}>
+        <label>
+          <input type="checkbox" checked={item.checked} onChange={() => void onToggle(item.itemKey)} />
+          <i>{item.checked ? "✓" : ""}</i>
+          <span><strong>{item.name}</strong><small>{groceryQuantityLabel(item)}{item.sourceType === "planned" ? " · from My Plan" : " · custom item"}</small></span>
+        </label>
+        {item.sourceType === "custom" && <button type="button" className="grocery-remove" onClick={() => void onRemoveCustom(item.itemKey)}>Remove</button>}
+      </div>)}
+    </section>)}
+
+    {!items.length && <div className="history-empty"><strong>Your grocery list is empty.</strong><span>Add meals to My Plan and their confirmed ingredients will appear here. You can also add a custom grocery item.</span><button onClick={onOpenPlan}>Open My Plan</button></div>}
+    {items.length > 0 && visibleItems.length === 0 && <div className="history-empty"><strong>Everything is checked.</strong><span>Show checked items whenever you want to review the complete list.</span><button onClick={() => setHideChecked(false)}>Show checked items</button></div>}
+    <p className="grocery-note">Quantities are the combined food weights saved in My Plan. Package purchase sizes and cooked-to-raw weights can differ.</p>
   </>;
+}
+
+function groceryQuantityLabel(item: GroceryItem) {
+  const quantity = Number.isInteger(item.quantity) ? item.quantity.toLocaleString() : item.quantity.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  if (item.unit === "g") return `${quantity} g planned`;
+  if (item.unit === "meal") return `${quantity} ${item.quantity === 1 ? "meal" : "meals"}`;
+  return `${quantity} ${item.quantity === 1 ? "item" : "items"}`;
 }
 
 function Progress({

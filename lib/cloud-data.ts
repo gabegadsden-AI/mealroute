@@ -12,6 +12,12 @@ export type CloudMeal = {
   eaten: boolean;
   locked?: boolean;
   color: string;
+  ingredients?: CloudMealIngredient[];
+};
+
+export type CloudMealIngredient = {
+  name: string;
+  amountGrams: number;
 };
 
 export type CloudMealHistory = Record<string, CloudMeal[]>;
@@ -43,11 +49,21 @@ function totalsFor(meals: CloudMeal[]) {
   }), { calories: 0, protein: 0, carbs: 0, fat: 0, meals: 0 });
 }
 
+function normalizeMealIngredients(raw: unknown): CloudMealIngredient[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(item => ({
+      name: String(item?.name || "").replace(/\s+/g, " ").trim().slice(0, 160),
+      amountGrams: numberValue(item?.amountGrams),
+    }))
+    .filter(item => item.name && item.amountGrams > 0 && item.amountGrams <= 5000);
+}
+
 export async function loadCloudState(supabase: SupabaseClient, userId: string) {
   const [mealsResult, productsResult] = await Promise.all([
     supabase
       .from("meal_entries")
-      .select("client_id,entry_kind,meal_date,meal_type,name,calories,protein,carbs,fat,meal_time,eaten,locked,color")
+      .select("client_id,entry_kind,meal_date,meal_type,name,calories,protein,carbs,fat,meal_time,eaten,locked,color,ingredients")
       .eq("user_id", userId)
       .order("created_at", { ascending: true }),
     supabase
@@ -76,6 +92,7 @@ export async function loadCloudState(supabase: SupabaseClient, userId: string) {
       eaten: Boolean(row.eaten),
       locked: row.locked ? true : undefined,
       color: String(row.color || "salmon"),
+      ingredients: normalizeMealIngredients(row.ingredients),
     };
     if (row.entry_kind === "planned") {
       planned.push(meal);
@@ -124,6 +141,7 @@ export async function syncCloudMeals(
       eaten: meal.eaten,
       locked: Boolean(meal.locked),
       color: meal.color,
+      ingredients: normalizeMealIngredients(meal.ingredients),
     }))),
     ...planned.map(meal => ({
       user_id: userId,
@@ -141,6 +159,7 @@ export async function syncCloudMeals(
       eaten: meal.eaten,
       locked: Boolean(meal.locked),
       color: meal.color,
+      ingredients: normalizeMealIngredients(meal.ingredients),
     })),
   ];
 
