@@ -49,6 +49,21 @@ type FdcFood = {
   foodNutrients?: FdcNutrient[];
 };
 
+export type FoodSearchResult = {
+  sourceKey: string;
+  sourceType: "usda";
+  name: string;
+  brandName?: string;
+  fdcId: number;
+  caloriesPer100g: number;
+  proteinPer100g: number;
+  carbsPer100g: number;
+  fatPer100g: number;
+  fibrePer100g: number;
+  nutritionSource: string;
+  dataType: string;
+};
+
 const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const has = (value: string, terms: string[]) => terms.some(term => value.includes(term));
 const round1 = (value: number) => Math.round((value + Number.EPSILON) * 10) / 10;
@@ -139,7 +154,7 @@ function genericSearchName(name: string) {
   return name;
 }
 
-async function searchFoodDataCentral(name: string, apiKey: string) {
+async function searchFoodDataCentralBest(name: string, apiKey: string) {
   const queryName = genericSearchName(name);
   const response = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(apiKey)}`, {
     method: "POST",
@@ -157,6 +172,56 @@ async function searchFoodDataCentral(name: string, apiKey: string) {
   return candidates.length ? toPer100g(candidates[0].food) : null;
 }
 
+export async function searchFoodDataCentralFoods(
+  name: string,
+  apiKey: string,
+  limit = 12,
+): Promise<FoodSearchResult[]> {
+  const response = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: name,
+      pageSize: Math.min(40, Math.max(limit * 2, 20)),
+      requireAllWords: false,
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw responseError(response);
+
+  const payload = await response.json() as { foods?: FdcFood[] };
+  const query = normalize(name);
+  const seen = new Set<number>();
+  return (payload.foods || [])
+    .map(food => ({ food, nutrition: toPer100g(food), score: scoreCandidate(food, query) }))
+    .filter((candidate): candidate is { food: FdcFood; nutrition: Per100gFood; score: number } => Boolean(candidate.nutrition))
+    .sort((a, b) => b.score - a.score)
+    .filter(candidate => {
+      if (seen.has(candidate.nutrition.fdcId)) return false;
+      seen.add(candidate.nutrition.fdcId);
+      return true;
+    })
+    .slice(0, Math.min(20, Math.max(1, limit)))
+    .map(({ food, nutrition }) => {
+      const brandName = String(food.brandName || food.brandOwner || "").trim();
+      const description = nutrition.description;
+      return {
+        sourceKey: `usda:${nutrition.fdcId}`,
+        sourceType: "usda" as const,
+        name: description,
+        brandName: brandName || undefined,
+        fdcId: nutrition.fdcId,
+        caloriesPer100g: round1(nutrition.calories),
+        proteinPer100g: round1(nutrition.protein),
+        carbsPer100g: round1(nutrition.carbs),
+        fatPer100g: round1(nutrition.fat),
+        fibrePer100g: round1(nutrition.fibre),
+        nutritionSource: `USDA FoodData Central · ${description}`,
+        dataType: String(food.dataType || "USDA"),
+      };
+    });
+}
+
 async function resolveFood(ingredient: ConfirmedIngredient, apiKey?: string) {
   const lockedId = Number(ingredient.fdcId);
   if (Number.isFinite(lockedId) && lockedId > 0) {
@@ -171,7 +236,7 @@ async function resolveFood(ingredient: ConfirmedIngredient, apiKey?: string) {
   const local = verifiedFoods.find(food => food.matches(normalizedName));
   if (local) return local;
   if (!apiKey) throw new Error(`A USDA_API_KEY is required to find USDA nutrition data for “${ingredient.name}”. Add it in Vercel Environment Variables, then redeploy.`);
-  const searched = await searchFoodDataCentral(ingredient.name, apiKey);
+  const searched = await searchFoodDataCentralBest(ingredient.name, apiKey);
   if (!searched) throw new Error(`No generic USDA match was found for “${ingredient.name}”. For a packaged product, select “Use package nutrition label”.`);
   return searched;
 }

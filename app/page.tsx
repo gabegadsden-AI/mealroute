@@ -21,6 +21,14 @@ import {
   suggestedMacroTargets,
   type MacroTargets,
 } from "../lib/macro-targets";
+import {
+  calculateManualNutrition,
+  customFoodKey,
+  loadRecentFoods,
+  packagedProductFood,
+  saveRecentFood,
+  type ManualFoodItem,
+} from "../lib/manual-food";
 import { profileSelect, type NutriPathProfile } from "../lib/profile";
 import { createClient } from "../lib/supabase/client";
 import {
@@ -301,12 +309,15 @@ export default function Home() {
   const [mealHistory, setMealHistory] = useState<MealHistory>({});
   const [plannedMeals, setPlannedMeals] = useState<Meal[]>([]);
   const [savedProducts, setSavedProducts] = useState<SavedPackagedProduct[]>([]);
+  const [recentFoods, setRecentFoods] = useState<ManualFoodItem[]>([]);
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
   const [legacyImport, setLegacyImport] = useState<LegacyImportData | null>(null);
   const [importingLegacy, setImportingLegacy] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [water, setWater] = useState(1500);
-  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros" | "weight">(null);
+  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros" | "weight" | "manual">(null);
+  const [manualStartMode, setManualStartMode] = useState<"search" | "saved" | "custom">("search");
+  const [manualInitialFood, setManualInitialFood] = useState<ManualFoodItem | null>(null);
   const [toast, setToast] = useState("");
   const [grocery, setGrocery] = useState<Record<string, boolean>>({ "Greek yoghurt": true, "Blueberries": true });
   const [range, setRange] = useState("Week");
@@ -420,6 +431,15 @@ export default function Home() {
       } catch {
         if (!active) return;
         notify("Weight history could not be loaded. Your meals and targets are still available.");
+      }
+
+      try {
+        const cloudRecentFoods = await loadRecentFoods(supabase, userData.user.id);
+        if (!active) return;
+        setRecentFoods(cloudRecentFoods);
+      } catch {
+        if (!active) return;
+        notify("Recent foods could not be loaded. Food search is still available.");
       }
 
       if (loadedProfile.local_import_status !== "imported") {
@@ -748,6 +768,71 @@ export default function Home() {
     }
   }
 
+  function openManualFood(
+    mode: "search" | "saved" | "custom" = "search",
+    food: ManualFoodItem | null = null,
+  ) {
+    setManualStartMode(mode);
+    setManualInitialFood(food);
+    setModal("manual");
+  }
+
+  async function addManualFood(
+    food: ManualFoodItem,
+    grams: number,
+    destination: "today" | "plan",
+  ) {
+    if (!userId) {
+      notify("Your account is still loading. Please try again.");
+      return false;
+    }
+
+    const nutrition = calculateManualNutrition(food, grams);
+    const nextMeal: Meal = {
+      id: Date.now(),
+      type: destination === "today" ? "Logged meal" : "Planned meal",
+      name: `${food.name} · ${nutrition.grams}g`,
+      calories: nutrition.calories,
+      protein: nutrition.protein,
+      carbs: nutrition.carbs,
+      fat: nutrition.fat,
+      time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      eaten: destination === "today",
+      color: "wrap",
+    };
+
+    let mealSaved: boolean;
+    if (destination === "today") {
+      const today = localDateKey();
+      const nextHistory = { ...mealHistory, [today]: [...(mealHistory[today] || []), nextMeal] };
+      setMealHistory(nextHistory);
+      setSelectedDate(today);
+      mealSaved = await saveMealState(nextHistory, plannedMeals, `${food.name} logged with ${nutrition.grams}g`);
+    } else {
+      const nextPlan = [...plannedMeals, nextMeal];
+      setPlannedMeals(nextPlan);
+      mealSaved = await saveMealState(mealHistory, nextPlan, `${food.name} added to My Plan with ${nutrition.grams}g`);
+    }
+
+    if (mealSaved) {
+      try {
+        const previous = recentFoods.find(item => item.sourceKey === food.sourceKey);
+        const saved = await saveRecentFood(createClient(), userId, food, previous?.timesUsed || 0, nutrition.grams);
+        setRecentFoods(current => [
+          saved,
+          ...current.filter(item => item.sourceKey !== saved.sourceKey),
+        ].slice(0, 30));
+      } catch {
+        notify("The meal was saved, but NutriPath could not update Recent foods.");
+      }
+    }
+
+    setManualInitialFood(null);
+    setModal(null);
+    setTab(destination);
+    return mealSaved;
+  }
+
   async function addAnalyzedMeal(destination: "today" | "plan" = "today") {
     if (!analysis) return;
     const nextMeal = {
@@ -803,7 +888,7 @@ export default function Home() {
             : <>
               {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
               {tab === "plan" && <Plan meals={plannedMeals} onMeal={markPlannedMeal} notify={notify} />}
-              {tab === "log" && <Log onPhoto={usePhoto} notify={notify} />}
+              {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} onManual={openManualFood} />}
               {tab === "grocery" && <Grocery checked={grocery} setChecked={setGrocery} notify={notify} />}
               {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />}
             </>}
@@ -824,7 +909,7 @@ export default function Home() {
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} />}
     </main>
   );
 }
@@ -1192,16 +1277,28 @@ function PhotoPicker({ label, capture, onPhoto, secondary = false }: { label: st
   </label>;
 }
 
-function Log({ onPhoto, notify }: { onPhoto: (file?: File) => void; notify: (s: string) => void }) {
-  const methods = [
-    ["◎", "Take a food photo", "Get an AI estimate with confidence and easy edits"], ["⌕", "Search food", "Find a meal, ingredient or restaurant item"],
-    ["▣", "Scan a barcode", "Quickly add a packaged food"], ["✎", "Enter manually", "Add calories or build an ingredient list"],
-  ];
+function Log({
+  onPhoto,
+  notify,
+  recentFoods,
+  onManual,
+}: {
+  onPhoto: (file?: File) => void;
+  notify: (s: string) => void;
+  recentFoods: ManualFoodItem[];
+  onManual: (mode: "search" | "saved" | "custom", food?: ManualFoodItem | null) => void;
+}) {
   return <>
     <section className="log-hero"><div className="camera-orb">◎<i>✦</i></div><h2>What did you eat?</h2><p>Snap a photo and NutriPath will estimate the meal—then ask when details could make it more accurate.</p><div className="photo-actions"><PhotoPicker label="Take a photo" capture="environment" onPhoto={onPhoto} /><PhotoPicker label="Upload from library" onPhoto={onPhoto} secondary /></div><span>Nutrition values are always estimates.</span></section>
-    <section className="method-grid">{methods.slice(1).map(([icon, title, sub]) => <button key={title} onClick={() => notify(`${title} opened`)}><i>{icon}</i><div><strong>{title}</strong><span>{sub}</span></div><b>›</b></button>)}</section>
-    <section className="section-block"><div className="section-heading"><div><p className="eyebrow">QUICK ADD</p><h2>Recent meals</h2></div><button>View history</button></div>
-      <div className="recent-row"><button onClick={() => notify("Tuna rice bowl added")}><span className="mini-food salmon" />Tuna rice bowl<small>540 kcal</small></button><button onClick={() => notify("Overnight oats added")}><span className="mini-food berry" />Overnight oats<small>410 kcal</small></button></div>
+    <section className="method-grid">
+      <button onClick={() => onManual("search")}><i>⌕</i><div><strong>Search food</strong><span>Find USDA foods and calculate an exact gram amount</span></div><b>›</b></button>
+      <button onClick={() => notify("Barcode scanning is planned for a later development step")}><i>▣</i><div><strong>Scan a barcode</strong><span>Coming after manual food search is verified</span></div><b>›</b></button>
+      <button onClick={() => onManual("custom")}><i>✎</i><div><strong>Enter manually</strong><span>Enter a food name, grams, calories and macros</span></div><b>›</b></button>
+    </section>
+    <section className="section-block"><div className="section-heading"><div><p className="eyebrow">QUICK ADD</p><h2>Recent foods</h2></div>{recentFoods.length > 0 && <button onClick={() => onManual("saved")}>View all</button>}</div>
+      {recentFoods.length
+        ? <div className="recent-row">{recentFoods.slice(0, 4).map((food, index) => <button key={food.sourceKey} onClick={() => onManual("saved", food)}><span className={`mini-food ${index % 2 ? "berry" : "wrap"}`} />{food.name}<small>{Math.round(food.caloriesPer100g)} kcal per 100g</small></button>)}</div>
+        : <div className="history-empty"><strong>No recent foods yet.</strong><span>Search or manually enter a food. After you log it, NutriPath will keep it here for faster reuse.</span><button onClick={() => onManual("search")}>Search food</button></div>}
     </section>
   </>;
 }
@@ -1411,7 +1508,201 @@ function WeightProgressEditor({
   </div>;
 }
 
-function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, macroTargets, onLogout, loggingOut, savedProducts, onSaveProducts, onSaveProfileGoals, onSaveProfileMacros, weightLogs, onSaveWeight, onDeleteWeight }: any) {
+function ManualFoodEditor({
+  startMode,
+  initialFood,
+  recentFoods,
+  savedProducts,
+  onAdd,
+}: {
+  startMode: "search" | "saved" | "custom";
+  initialFood: ManualFoodItem | null;
+  recentFoods: ManualFoodItem[];
+  savedProducts: SavedPackagedProduct[];
+  onAdd: (food: ManualFoodItem, grams: number, destination: "today" | "plan") => Promise<boolean>;
+}) {
+  const [mode, setMode] = useState<"search" | "saved" | "custom">(startMode);
+  const [selectedFood, setSelectedFood] = useState<ManualFoodItem | null>(initialFood);
+  const [grams, setGrams] = useState(initialFood ? String(initialFood.lastGrams || 100) : "");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ManualFoodItem[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState("");
+  const [customName, setCustomName] = useState("");
+  const [customGrams, setCustomGrams] = useState("");
+  const [customCalories, setCustomCalories] = useState("");
+  const [customProtein, setCustomProtein] = useState("");
+  const [customCarbs, setCustomCarbs] = useState("");
+  const [customFat, setCustomFat] = useState("");
+  const [customFibre, setCustomFibre] = useState("");
+
+  const savedFoods = useMemo(() => {
+    const combined = [
+      ...recentFoods,
+      ...savedProducts.map(product => packagedProductFood(product)),
+    ];
+    const unique = new Map<string, ManualFoodItem>();
+    combined.forEach(food => {
+      if (!unique.has(food.sourceKey)) unique.set(food.sourceKey, food);
+    });
+    return Array.from(unique.values());
+  }, [recentFoods, savedProducts]);
+
+  const gramNumber = Number(grams);
+  const validGrams = Number.isFinite(gramNumber) && gramNumber >= 1 && gramNumber <= 5000;
+  const preview = selectedFood && validGrams
+    ? calculateManualNutrition(selectedFood, gramNumber)
+    : null;
+
+  function chooseFood(food: ManualFoodItem) {
+    setSelectedFood(food);
+    setGrams(String(food.lastGrams || 100));
+    setError("");
+  }
+
+  async function searchFoods(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const cleanQuery = query.replace(/\s+/g, " ").trim();
+    if (cleanQuery.length < 2) {
+      setError("Enter at least two characters.");
+      return;
+    }
+    setSearching(true);
+    setError("");
+    setResults([]);
+    try {
+      const response = await fetch("/api/food-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: cleanQuery }),
+      });
+      const payload = await response.json() as { foods?: ManualFoodItem[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Food search failed.");
+      setResults(Array.isArray(payload.foods) ? payload.foods : []);
+      if (!payload.foods?.length) setError("No USDA foods matched that search. Try a simpler food name or use Custom.");
+    } catch (searchError) {
+      setError(searchError instanceof Error ? searchError.message : "Food search failed.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function reviewCustomFood(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    const enteredGrams = Number(customGrams);
+    const totals = {
+      calories: Number(customCalories),
+      protein: Number(customProtein || 0),
+      carbs: Number(customCarbs || 0),
+      fat: Number(customFat || 0),
+      fibre: Number(customFibre || 0),
+    };
+    if (!customName.trim()) {
+      setError("Enter a food name.");
+      return;
+    }
+    if (!Number.isFinite(enteredGrams) || enteredGrams < 1 || enteredGrams > 5000) {
+      setError("Enter a food weight between 1 and 5,000 grams.");
+      return;
+    }
+    if (!Number.isFinite(totals.calories) || totals.calories <= 0 || totals.calories > enteredGrams * 10) {
+      setError("Enter valid calories for this gram amount.");
+      return;
+    }
+    if (Object.values(totals).some(value => !Number.isFinite(value) || value < 0)) {
+      setError("Nutrition values cannot be negative.");
+      return;
+    }
+    if ([totals.protein, totals.carbs, totals.fat, totals.fibre].some(value => value > enteredGrams)) {
+      setError("Protein, carbs, fat and fibre cannot individually exceed the food’s total gram weight.");
+      return;
+    }
+
+    const ratio = 100 / enteredGrams;
+    const baseFood = {
+      sourceType: "custom" as const,
+      name: customName.trim().slice(0, 160),
+      caloriesPer100g: totals.calories * ratio,
+      proteinPer100g: totals.protein * ratio,
+      carbsPer100g: totals.carbs * ratio,
+      fatPer100g: totals.fat * ratio,
+      fibrePer100g: totals.fibre * ratio,
+      nutritionSource: `Manual entry · ${customName.trim().slice(0, 160)}`,
+    };
+    setSelectedFood({ ...baseFood, sourceKey: customFoodKey(baseFood) });
+    setGrams(String(enteredGrams));
+  }
+
+  async function addFood(destination: "today" | "plan") {
+    if (!selectedFood || !preview || adding) return;
+    setAdding(true);
+    setError("");
+    const saved = await onAdd(selectedFood, preview.grams, destination);
+    if (!saved) {
+      setError("NutriPath could not complete this entry. Check the message above and try again.");
+      setAdding(false);
+    }
+  }
+
+  if (selectedFood) {
+    return <div className="manual-food-editor">
+      <button className="goals-back" type="button" onClick={() => { setSelectedFood(null); setError(""); }}>‹ Change food</button>
+      <p className="eyebrow">MANUAL FOOD LOG</p>
+      <h2>{selectedFood.name}</h2>
+      {selectedFood.brandName && <p className="manual-brand">{selectedFood.brandName}</p>}
+      <div className="manual-source"><strong>{selectedFood.sourceType === "usda" ? "USDA database" : selectedFood.sourceType === "nutrition_label" ? "Package nutrition label" : "Custom nutrition"}</strong><span>{selectedFood.nutritionSource}{selectedFood.fdcId ? ` · FDC ID ${selectedFood.fdcId}` : ""}</span></div>
+      <label className="manual-grams"><span>Exact amount eaten</span><input type="number" inputMode="decimal" min="1" max="5000" step="0.1" value={grams} onChange={event => setGrams(event.target.value)} /><small>g</small></label>
+      {preview
+        ? <div className="manual-preview">
+          <div className="manual-calories"><span>Calculated total</span><strong>{preview.calories}<small> kcal</small></strong></div>
+          <div><span>Carbs</span><strong>{preview.carbs}g</strong></div>
+          <div><span>Protein</span><strong>{preview.protein}g</strong></div>
+          <div><span>Fat</span><strong>{preview.fat}g</strong></div>
+          <div><span>Fibre</span><strong>{preview.fibre}g</strong></div>
+        </div>
+        : <div className="auth-error">Enter a gram amount between 1 and 5,000.</div>}
+      {error && <div className="auth-error">{error}</div>}
+      <div className="manual-add-actions"><button type="button" disabled={!preview || adding} onClick={() => addFood("today")}>{adding ? "Saving…" : "Add to Today"}</button><button type="button" disabled={!preview || adding} onClick={() => addFood("plan")}>Add to My Plan</button></div>
+      <p className="goals-safety">Values are calculated from the selected per-100g source and the exact gram amount entered. Verify the selected food and preparation.</p>
+    </div>;
+  }
+
+  return <div className="manual-food-editor">
+    <p className="eyebrow">MANUAL FOOD LOG</p>
+    <h2>Choose a food</h2>
+    <p className="modal-sub">Search verified USDA records, reuse a saved food, or enter nutrition yourself.</p>
+    <div className="segment manual-tabs">{[
+      ["search", "Search USDA"],
+      ["saved", "Saved"],
+      ["custom", "Custom"],
+    ].map(([value, label]) => <button type="button" key={value} className={mode === value ? "active" : ""} onClick={() => { setMode(value as "search" | "saved" | "custom"); setError(""); }}>{label}</button>)}</div>
+
+    {mode === "search" && <>
+      <form className="manual-search" onSubmit={searchFoods}><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Example: cooked brown rice" maxLength={80} /><button type="submit" disabled={searching}>{searching ? "Searching…" : "Search"}</button></form>
+      <div className="manual-result-list">{results.map(food => <button type="button" key={food.sourceKey} onClick={() => chooseFood(food)}><span><strong>{food.name}</strong>{food.brandName && <small>{food.brandName}</small>}<em>{food.fdcId ? `USDA FDC ID ${food.fdcId}` : "USDA FoodData Central"}</em></span><b>{Math.round(food.caloriesPer100g)} kcal<small>per 100g</small></b></button>)}</div>
+    </>}
+
+    {mode === "saved" && <div className="manual-result-list">{savedFoods.length
+      ? savedFoods.map(food => <button type="button" key={food.sourceKey} onClick={() => chooseFood(food)}><span><strong>{food.name}</strong><small>{food.sourceType === "nutrition_label" ? "Package nutrition label" : food.sourceType === "usda" ? "USDA FoodData Central" : "Custom entry"}</small>{food.timesUsed ? <em>Used {food.timesUsed} {food.timesUsed === 1 ? "time" : "times"}</em> : null}</span><b>{Math.round(food.caloriesPer100g)} kcal<small>per 100g</small></b></button>)
+      : <div className="history-empty"><strong>No saved foods yet.</strong><span>Foods appear here after you log them or save a package nutrition label.</span></div>}</div>}
+
+    {mode === "custom" && <form className="manual-custom-form" onSubmit={reviewCustomFood}>
+      <label className="manual-custom-name"><span>Food name</span><input value={customName} onChange={event => setCustomName(event.target.value)} maxLength={160} placeholder="Example: Homemade protein bar" /></label>
+      <label><span>Amount</span><input type="number" inputMode="decimal" min="1" max="5000" step="0.1" value={customGrams} onChange={event => setCustomGrams(event.target.value)} /><small>g</small></label>
+      <label><span>Calories</span><input type="number" inputMode="decimal" min="1" step="1" value={customCalories} onChange={event => setCustomCalories(event.target.value)} /><small>kcal</small></label>
+      <label><span>Carbs</span><input type="number" inputMode="decimal" min="0" step="0.1" value={customCarbs} onChange={event => setCustomCarbs(event.target.value)} /><small>g</small></label>
+      <label><span>Protein</span><input type="number" inputMode="decimal" min="0" step="0.1" value={customProtein} onChange={event => setCustomProtein(event.target.value)} /><small>g</small></label>
+      <label><span>Fat</span><input type="number" inputMode="decimal" min="0" step="0.1" value={customFat} onChange={event => setCustomFat(event.target.value)} /><small>g</small></label>
+      <label><span>Fibre</span><input type="number" inputMode="decimal" min="0" step="0.1" value={customFibre} onChange={event => setCustomFibre(event.target.value)} /><small>g</small></label>
+      <button className="primary full" type="submit">Review nutrition</button>
+    </form>}
+    {error && <div className="auth-error">{error}</div>}
+  </div>;
+}
+
+function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, macroTargets, onLogout, loggingOut, savedProducts, onSaveProducts, onSaveProfileGoals, onSaveProfileMacros, weightLogs, onSaveWeight, onDeleteWeight, manualStartMode, manualInitialFood, recentFoods, onAddManualFood }: any) {
   const [answers, setAnswers] = useState<string[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewIngredient[]>([]);
   const [reviewDirty, setReviewDirty] = useState(false);
@@ -1617,5 +1908,6 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
     {type === "weight" && profile && <WeightProgressEditor profile={profile} logs={weightLogs} onBack={() => next("profile")} onReviewGoals={() => next("goals")} onSave={onSaveWeight} onDelete={onDeleteWeight} />}
     {type === "goals" && profile && <GoalsEditor profile={profile} onBack={() => next("profile")} onSave={onSaveProfileGoals} />}
     {type === "macros" && profile && <MacroTargetsEditor profile={profile} calorieGoal={target} currentTargets={macroTargets} onBack={() => next("profile")} onSave={onSaveProfileMacros} />}
+    {type === "manual" && <ManualFoodEditor startMode={manualStartMode} initialFood={manualInitialFood} recentFoods={recentFoods} savedProducts={savedProducts} onAdd={onAddManualFood} />}
   </section></div>;
 }
