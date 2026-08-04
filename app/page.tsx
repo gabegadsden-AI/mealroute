@@ -50,6 +50,16 @@ import {
   weightToKg,
   type WeightLog,
 } from "../lib/weight-progress";
+import {
+  DEFAULT_WATER_GOAL_ML,
+  MAX_DAILY_WATER_ML,
+  MAX_WATER_GOAL_ML,
+  MIN_WATER_GOAL_ML,
+  loadWaterDays,
+  upsertWaterDay,
+  waterDaysByDate,
+  type WaterDay,
+} from "../lib/water-tracking";
 
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
 type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string; ingredients?: PlannedIngredient[] };
@@ -333,10 +343,10 @@ export default function Home() {
   const [savedProducts, setSavedProducts] = useState<SavedPackagedProduct[]>([]);
   const [recentFoods, setRecentFoods] = useState<ManualFoodItem[]>([]);
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
+  const [waterHistory, setWaterHistory] = useState<Record<string, WaterDay>>({});
   const [legacyImport, setLegacyImport] = useState<LegacyImportData | null>(null);
   const [importingLegacy, setImportingLegacy] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
-  const [water, setWater] = useState(1500);
   const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros" | "weight" | "manual">(null);
   const [manualStartMode, setManualStartMode] = useState<"search" | "saved" | "custom">("search");
   const [manualInitialFood, setManualInitialFood] = useState<ManualFoodItem | null>(null);
@@ -356,6 +366,8 @@ export default function Home() {
   const protein = totals.protein;
   const carbs = totals.carbs;
   const fat = totals.fat;
+  const water = selectedDate ? waterHistory[selectedDate]?.amount_ml || 0 : 0;
+  const waterGoal = Number(profile?.water_goal_ml || DEFAULT_WATER_GOAL_ML);
   const target = Number(profile?.calorie_goal || profile?.suggested_calorie_goal || 1850);
   const suggestedMacros = useMemo(
     () => suggestedMacroTargets(target, profile?.primary_goal || null),
@@ -465,6 +477,15 @@ export default function Home() {
       } catch {
         if (!active) return;
         notify("Weight history could not be loaded. Your meals and targets are still available.");
+      }
+
+      try {
+        const cloudWaterDays = await loadWaterDays(supabase, userData.user.id);
+        if (!active) return;
+        setWaterHistory(waterDaysByDate(cloudWaterDays));
+      } catch {
+        if (!active) return;
+        notify("Water history could not be loaded. Your meals and targets are still available.");
       }
 
       try {
@@ -796,10 +817,63 @@ export default function Home() {
     await saveMealState(mealHistory, nextPlan, "Your planned meal is saved to your account");
   }
 
-  function addWater(amount: number) {
-    setWater(v => Math.min(3000, v + amount));
-    setModal(null);
-    notify(`${amount} ml of water added`);
+  async function saveWaterTotal(amountMl: number) {
+    if (!userId) return "Your account is still loading. Please try again.";
+    const date = selectedDate || localDateKey();
+    const amount = Math.round(amountMl);
+    if (!Number.isFinite(amount) || amount < 0 || amount > MAX_DAILY_WATER_ML) {
+      return `Enter a daily total between 0 and ${MAX_DAILY_WATER_ML.toLocaleString()} ml.`;
+    }
+
+    const previous = waterHistory[date];
+    setWaterHistory(current => ({
+      ...current,
+      [date]: previous
+        ? { ...previous, amount_ml: amount }
+        : { id: `pending-${date}`, user_id: userId, log_date: date, amount_ml: amount, created_at: "", updated_at: "" },
+    }));
+
+    try {
+      const saved = await upsertWaterDay(createClient(), userId, date, amount);
+      setWaterHistory(current => ({ ...current, [date]: saved }));
+      notify(`Water saved for ${date === localDateKey() ? "today" : dateFromKey(date).toLocaleDateString([], { day: "numeric", month: "short" })}`);
+      return "";
+    } catch {
+      setWaterHistory(current => {
+        const next = { ...current };
+        if (previous) next[date] = previous; else delete next[date];
+        return next;
+      });
+      return "Your water total could not be saved. Check your connection and try again.";
+    }
+  }
+
+  async function addWater(amountMl: number) {
+    const nextTotal = water + Math.round(amountMl);
+    if (!Number.isFinite(amountMl) || amountMl <= 0) return "Enter an amount greater than 0 ml.";
+    if (nextTotal > MAX_DAILY_WATER_ML) {
+      return `That would exceed NutriPath’s ${MAX_DAILY_WATER_ML.toLocaleString()} ml daily entry limit.`;
+    }
+    return saveWaterTotal(nextTotal);
+  }
+
+  async function saveWaterGoal(goalMl: number) {
+    if (!userId) return "Your account is still loading. Please try again.";
+    const goal = Math.round(goalMl);
+    if (!Number.isFinite(goal) || goal < MIN_WATER_GOAL_ML || goal > MAX_WATER_GOAL_ML) {
+      return `Enter a daily goal between ${MIN_WATER_GOAL_ML.toLocaleString()} and ${MAX_WATER_GOAL_ML.toLocaleString()} ml.`;
+    }
+
+    const { data, error } = await createClient()
+      .from("profiles")
+      .update({ water_goal_ml: goal })
+      .eq("user_id", userId)
+      .select(profileSelect)
+      .single();
+    if (error || !data) return "Your water goal could not be saved. Check your connection and try again.";
+    setProfile(data as NutriPathProfile);
+    notify("Your daily water goal is updated");
+    return "";
   }
 
   async function usePhoto(file: File | undefined) {
@@ -1003,7 +1077,7 @@ export default function Home() {
           {!dataReady
             ? <div className="history-empty"><strong>Loading your NutriPath account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
             : <>
-              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
+              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
               {tab === "plan" && <Plan meals={plannedMeals} onMeal={markPlannedMeal} notify={notify} onReviewGrocery={() => setTab("grocery")} />}
               {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} onManual={openManualFood} />}
               {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
@@ -1026,7 +1100,7 @@ export default function Home() {
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} />}
     </main>
   );
 }
@@ -1317,7 +1391,7 @@ function MacroTargetsEditor({
   </div>;
 }
 
-function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, onMeal, onWater, onLog }: any) {
+function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog }: any) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const dates = today ? Array.from({ length: 7 }, (_, index) => {
@@ -1349,7 +1423,7 @@ function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fa
         <MacroGoal kind="protein" label="Protein" value={protein} goal={macroTargets.protein} />
         <MacroGoal kind="fat" label="Fat" value={fat} goal={macroTargets.fat} />
       </div>
-      <div className="overview-actions"><button className="scan-meal" onClick={onLog}><span>＋</span><b>Scan or log meal</b></button><button onClick={onWater}><span>♢</span><b>{(water / 1000).toFixed(1)}L water</b></button></div>
+      <div className="overview-actions"><button className="scan-meal" onClick={onLog}><span>＋</span><b>Scan or log meal</b></button><button onClick={onWater} aria-label={`Water: ${water} of ${waterGoal} millilitres`}><span>♢</span><b>{(water / 1000).toFixed(1)} / {(waterGoal / 1000).toFixed(1)}L</b></button></div>
     </section>
 
     <section className="section-block">
@@ -1909,7 +1983,78 @@ function ManualFoodEditor({
   </div>;
 }
 
-function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, macroTargets, onLogout, loggingOut, savedProducts, onSaveProducts, onSaveProfileGoals, onSaveProfileMacros, weightLogs, onSaveWeight, onDeleteWeight, manualStartMode, manualInitialFood, recentFoods, onAddManualFood }: any) {
+function WaterEditor({ water, goal, date, onAdd, onSetTotal, onSaveGoal }: {
+  water: number;
+  goal: number;
+  date: string;
+  onAdd: (amountMl: number) => Promise<string>;
+  onSetTotal: (amountMl: number) => Promise<string>;
+  onSaveGoal: (goalMl: number) => Promise<string>;
+}) {
+  const [customAmount, setCustomAmount] = useState("");
+  const [correctedTotal, setCorrectedTotal] = useState(String(water));
+  const [goalAmount, setGoalAmount] = useState(String(goal));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => setCorrectedTotal(String(water)), [water]);
+  useEffect(() => setGoalAmount(String(goal)), [goal]);
+
+  async function run(action: () => Promise<string>, afterSave?: () => void) {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    const saveError = await action();
+    setSaving(false);
+    if (saveError) {
+      setError(saveError);
+      return;
+    }
+    afterSave?.();
+  }
+
+  const selectedDateLabel = date === localDateKey()
+    ? "today"
+    : dateFromKey(date).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+  const progress = goal > 0 ? Math.min(100, Math.round((water / goal) * 100)) : 0;
+
+  return <div className="water-editor">
+    <div className="modal-icon">♢</div>
+    <p className="eyebrow">WATER</p>
+    <h2>Water for {selectedDateLabel}</h2>
+    <p className="modal-sub">Your water is saved to this date and restored when you refresh or sign in again.</p>
+
+    <div className="water-status">
+      <div><strong>{water.toLocaleString()}</strong><span>/ {goal.toLocaleString()} ml</span></div>
+      <small>{progress}% of your daily goal</small>
+      <i><b style={{ width: `${progress}%` }} /></i>
+    </div>
+
+    <div className="water-options" aria-label="Quick add water">
+      {[250, 500, 750].map(amount => <button type="button" key={amount} disabled={saving} onClick={() => void run(() => onAdd(amount))}><strong>{amount}</strong><span>ml · Add</span></button>)}
+    </div>
+
+    <section className="water-edit-section">
+      <div className="goals-section-title"><strong>Add another amount</strong><span>Enter the amount you just drank</span></div>
+      <div className="water-input-action"><label><span>Amount</span><input type="number" inputMode="numeric" min="1" max={MAX_DAILY_WATER_ML} step="1" value={customAmount} onChange={event => setCustomAmount(event.target.value)} /><small>ml</small></label><button type="button" disabled={saving || !customAmount} onClick={() => void run(() => onAdd(Number(customAmount)), () => setCustomAmount(""))}>Add</button></div>
+    </section>
+
+    <section className="water-edit-section">
+      <div className="goals-section-title"><strong>Correct this date’s total</strong><span>Use this if an earlier entry was wrong</span></div>
+      <div className="water-input-action"><label><span>Exact total</span><input type="number" inputMode="numeric" min="0" max={MAX_DAILY_WATER_ML} step="1" value={correctedTotal} onChange={event => setCorrectedTotal(event.target.value)} /><small>ml</small></label><button type="button" disabled={saving || correctedTotal === ""} onClick={() => void run(() => onSetTotal(Number(correctedTotal)))}>Save total</button></div>
+    </section>
+
+    <section className="water-edit-section">
+      <div className="goals-section-title"><strong>Daily water goal</strong><span>This target applies to every date</span></div>
+      <div className="water-input-action"><label><span>Goal</span><input type="number" inputMode="numeric" min={MIN_WATER_GOAL_ML} max={MAX_WATER_GOAL_ML} step="50" value={goalAmount} onChange={event => setGoalAmount(event.target.value)} /><small>ml</small></label><button type="button" disabled={saving || goalAmount === ""} onClick={() => void run(() => onSaveGoal(Number(goalAmount)))}>Save goal</button></div>
+    </section>
+
+    {error && <div className="auth-error" role="alert">{error}</div>}
+    <p className="goals-safety">Water needs vary. This is a personal tracking target, not a medical recommendation. If you have been given a fluid limit, follow your qualified health professional’s advice.</p>
+  </div>;
+}
+
+function Modal({ type, close, addWater, setWaterTotal, saveWaterGoal, water, waterGoal, waterDate, next, notify, setTab, onPhoto, uploadedPhoto, uploadedData, analysis, analyzing, analysisError, onAnalyze, onAddAnalysis, profile, target, macroTargets, onLogout, loggingOut, savedProducts, onSaveProducts, onSaveProfileGoals, onSaveProfileMacros, weightLogs, onSaveWeight, onDeleteWeight, manualStartMode, manualInitialFood, recentFoods, onAddManualFood }: any) {
   const [answers, setAnswers] = useState<string[]>([]);
   const [reviewItems, setReviewItems] = useState<ReviewIngredient[]>([]);
   const [reviewDirty, setReviewDirty] = useState(false);
@@ -2048,7 +2193,7 @@ function Modal({ type, close, addWater, next, notify, setTab, onPhoto, uploadedP
 
   return <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && close()}><section className={`modal-sheet ${type === "result" ? "result-sheet" : ""}`}>
     <button className="modal-close" onClick={close}>×</button>
-    {type === "water" && <><div className="modal-icon">♢</div><p className="eyebrow">WATER</p><h2>Add to today</h2><p className="modal-sub">You’re at 1.5L of your 2.5L goal.</p><div className="water-options"><button onClick={() => addWater(250)}><strong>250</strong><span>ml · Glass</span></button><button onClick={() => addWater(500)}><strong>500</strong><span>ml · Bottle</span></button><button onClick={() => addWater(750)}><strong>750</strong><span>ml · Large bottle</span></button></div><button className="text-button">Enter a custom amount</button></>}
+    {type === "water" && <WaterEditor water={water} goal={waterGoal} date={waterDate} onAdd={addWater} onSetTotal={setWaterTotal} onSaveGoal={saveWaterGoal} />}
     {type === "log" && <><div className="modal-icon">＋</div><p className="eyebrow">ADD FOOD</p><h2>How would you like to log?</h2><div className="modal-photo-actions"><PhotoPicker label="Take a photo" capture="environment" onPhoto={onPhoto} /><PhotoPicker label="Upload from library" onPhoto={onPhoto} secondary /></div><div className="modal-list"><button onClick={() => { close(); setTab("log"); }}><i>⌕</i><span><strong>Search or scan</strong><small>Food, meals and barcodes</small></span><b>›</b></button><button onClick={() => notify("Previous meals opened")}><i>↻</i><span><strong>Choose a previous meal</strong><small>Quickly log it again</small></span><b>›</b></button></div></>}
     {type === "scan" && <><div className={`scan-frame ${uploadedPhoto ? "has-photo" : ""}`} style={uploadedPhoto ? { backgroundImage: `url(${uploadedPhoto})` } : undefined}>{!uploadedPhoto && <div className="scan-food"><span>Photo</span><span>Upload</span><span>Preview</span></div>}<b>✓ Photo uploaded successfully</b></div><p className="eyebrow">PHOTO ANALYSIS</p><h2>Your meal photo is ready</h2><p className="modal-sub">NutriPath will identify visible foods, estimate portions and nutrition, and ask up to two questions when important details are unclear.</p>{analysisError && <div className="connection-notice"><b>Analysis couldn’t start</b><span>{analysisError}</span></div>}<button className="primary full" disabled={!uploadedData || analyzing} onClick={() => onAnalyze()}>{analyzing ? "Analyzing your meal…" : uploadedData ? "Analyze this photo" : "Preparing photo…"}</button><button className="text-button" onClick={() => next("log")}>Choose a different photo</button></>}
     {type === "clarify" && analysis && <><span className="step-label">{analysis.clarifyingQuestions.length} quick {analysis.clarifyingQuestions.length === 1 ? "question" : "questions"}</span><div className="modal-icon">?</div><h2>A little detail will improve your estimate</h2><p className="modal-sub">NutriPath identified this as <b>{analysis.mealName}</b>, with {analysis.confidence.toLowerCase()} confidence.</p><div className="question-list">{analysis.clarifyingQuestions.map((question: string, index: number) => <label key={question}><span>{question}</span><input value={answers[index] || ""} onChange={event => setAnswers(current => { const updated = [...current]; updated[index] = event.target.value; return updated; })} placeholder="Type your answer, or ‘not sure’" /></label>)}</div>{analysisError && <div className="connection-notice"><b>Couldn’t refine estimate</b><span>{analysisError}</span></div>}<button className="primary full" disabled={analyzing || analysis.clarifyingQuestions.some((_: string, index: number) => !answers[index]?.trim())} onClick={() => onAnalyze(answers)}>{analyzing ? "Refining estimate…" : "Update my estimate"}</button><button className="text-button" onClick={() => next("result")}>Use current estimate</button></>}
