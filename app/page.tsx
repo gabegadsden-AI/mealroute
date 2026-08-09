@@ -113,12 +113,29 @@ const SAVED_PRODUCTS_KEY = "nutripath:saved-packaged-products:v1";
 const DAILY_MEALS_KEY = "nutripath:daily-meals:v1";
 const MEAL_HISTORY_KEY = "nutripath:meal-history:v2";
 const LEGACY_IMPORT_DECISION_KEY = "nutripath:legacy-import-decision:v1";
+const GROCERY_WEEK_KEY = "nutripath:grocery-week:v1";
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function weekRangeLabel(startKey: string) {
+  const normalizedStart = weekStartKey(startKey);
+  const start = dateFromKey(normalizedStart);
+  const end = dateFromKey(shiftDateKey(normalizedStart, 6));
+  const startMonth = start.toLocaleDateString([], { month: "long" });
+  const endMonth = end.toLocaleDateString([], { month: "long" });
+
+  if (start.getFullYear() !== end.getFullYear()) {
+    return `${startMonth} ${start.getDate()}, ${start.getFullYear()}–${endMonth} ${end.getDate()}, ${end.getFullYear()}`;
+  }
+  if (start.getMonth() !== end.getMonth()) {
+    return `${startMonth} ${start.getDate()}–${endMonth} ${end.getDate()}, ${start.getFullYear()}`;
+  }
+  return `${startMonth} ${start.getDate()}–${end.getDate()}, ${start.getFullYear()}`;
 }
 
 function normalizeStoredMeal(raw: any): Meal | null {
@@ -354,6 +371,7 @@ export default function Home() {
   const [mealHistory, setMealHistory] = useState<MealHistory>({});
   const [plannedMeals, setPlannedMeals] = useState<Meal[]>([]);
   const [planWeekStart, setPlanWeekStart] = useState("");
+  const [groceryWeekStart, setGroceryWeekStart] = useState("");
   const [savedProducts, setSavedProducts] = useState<SavedPackagedProduct[]>([]);
   const [recentFoods, setRecentFoods] = useState<ManualFoodItem[]>([]);
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
@@ -441,11 +459,20 @@ export default function Home() {
       const currentPlanWeek = weekStartKey(today);
       const historyCacheKey = userStorageKey(MEAL_HISTORY_KEY, userData.user.id);
       const productsCacheKey = userStorageKey(SAVED_PRODUCTS_KEY, userData.user.id);
+      const groceryWeekCacheKey = userStorageKey(GROCERY_WEEK_KEY, userData.user.id);
+      let initialGroceryWeek = currentPlanWeek;
+      try {
+        const storedGroceryWeek = window.localStorage.getItem(groceryWeekCacheKey);
+        if (isDateKey(storedGroceryWeek)) initialGroceryWeek = weekStartKey(storedGroceryWeek);
+      } catch {
+        // The current week remains available when browser storage is unavailable.
+      }
 
       setProfile(loadedProfile);
       setUserId(userData.user.id);
       setSelectedDate(today);
       setPlanWeekStart(currentPlanWeek);
+      setGroceryWeekStart(initialGroceryWeek);
 
       try {
         const cloud = await loadCloudState(supabase, userData.user.id);
@@ -458,7 +485,7 @@ export default function Home() {
         setPlannedMeals(cloudPlan);
         setSavedProducts(cloudProducts);
         try {
-          const accountGrocery = await reconcilePlannedGroceryItems(supabase, userData.user.id, mealsForWeek(cloudPlan, currentPlanWeek));
+          const accountGrocery = await reconcilePlannedGroceryItems(supabase, userData.user.id, mealsForWeek(cloudPlan, initialGroceryWeek));
           if (!active) return;
           setGroceryItems(accountGrocery);
         } catch {
@@ -559,9 +586,16 @@ export default function Home() {
 
   async function refreshGroceryForPlan(planned: Meal[], startKey = planWeekStart || weekStartKey()) {
     if (!userId) return false;
+    const activeStartKey = isDateKey(startKey) ? weekStartKey(startKey) : weekStartKey();
     try {
-      const items = await reconcilePlannedGroceryItems(createClient(), userId, mealsForWeek(planned, startKey));
+      const items = await reconcilePlannedGroceryItems(createClient(), userId, mealsForWeek(planned, activeStartKey));
       setGroceryItems(items);
+      setGroceryWeekStart(activeStartKey);
+      try {
+        window.localStorage.setItem(userStorageKey(GROCERY_WEEK_KEY, userId), activeStartKey);
+      } catch {
+        // The displayed list remains correct for this session when browser storage is unavailable.
+      }
       setGroceryReady(true);
       return true;
     } catch {
@@ -1113,6 +1147,11 @@ export default function Home() {
   }
 
   const selectedDateLabel = selectedDate ? dateFromKey(selectedDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }) : "";
+  const activeGroceryWeek = isDateKey(groceryWeekStart) ? weekStartKey(groceryWeekStart) : weekStartKey();
+  const groceryWeekLabel = weekRangeLabel(activeGroceryWeek);
+  const topbarContext = tab === "grocery"
+    ? `GROCERIES FOR ${groceryWeekLabel.toUpperCase()}`
+    : selectedDateLabel ? selectedDateLabel.toUpperCase() : "YOUR NUTRITION";
   const title = tab === "today" ? !selectedDate || selectedDate === localDateKey() ? "Today" : selectedDateLabel : tab === "plan" ? "My Plan" : tab === "log" ? "Log Food" : tab === "grocery" ? "Grocery List" : "History";
   const legacyMealCount = legacyImport
     ? Object.values(legacyImport.days).reduce((count, dayMeals) => count + dayMeals.length, 0) + legacyImport.planned.length
@@ -1132,7 +1171,7 @@ export default function Home() {
       <section className="phone-app">
         <header className="topbar">
           <div className="mobile-brand"><Brand /></div>
-          <div><p className="eyebrow">{selectedDateLabel ? selectedDateLabel.toUpperCase() : "YOUR NUTRITION"}</p><h1>{title}</h1></div>
+          <div><p className="eyebrow">{topbarContext}</p><h1>{title}</h1></div>
           <button className="avatar" aria-label="Open profile" onClick={() => setModal("profile")}>{profileInitials(profile?.name)}</button>
         </header>
 
@@ -1143,7 +1182,7 @@ export default function Home() {
               {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
               {tab === "plan" && <Plan meals={plannedMeals} weekStart={planWeekStart || weekStartKey()} onWeekChange={setPlanWeekStart} onSchedule={updatePlannedMealSchedule} onRemove={removePlannedMeal} onLog={logPlannedMeal} onReviewGrocery={openWeeklyGrocery} />}
               {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} onManual={openManualFood} />}
-              {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
+              {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} weekLabel={groceryWeekLabel} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
               {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />}
             </>}
         </div>
@@ -1660,6 +1699,7 @@ function Log({
 function Grocery({
   items,
   ready,
+  weekLabel,
   onToggle,
   onAddCustom,
   onRemoveCustom,
@@ -1667,6 +1707,7 @@ function Grocery({
 }: {
   items: GroceryItem[];
   ready: boolean;
+  weekLabel: string;
   onToggle: (itemKey: string) => Promise<void>;
   onAddCustom: (values: { name: string; quantity: number; unit: GroceryUnit; category: GroceryCategory }) => Promise<string>;
   onRemoveCustom: (itemKey: string) => Promise<void>;
@@ -1716,7 +1757,7 @@ function Grocery({
   }
 
   return <>
-    <section className="grocery-head"><div className="grocery-icon">✓</div><div><p className="eyebrow">FROM MY PLAN</p><h2>{items.length} {items.length === 1 ? "item" : "items"} on your list</h2><p>{checkedCount} checked · Repeated planned ingredients are combined.</p></div></section>
+    <section className="grocery-head"><div className="grocery-icon">✓</div><div><p className="eyebrow">FROM MY PLAN · {weekLabel.toUpperCase()}</p><h2>{items.length} {items.length === 1 ? "item" : "items"} on your list</h2><p>{checkedCount} checked · Repeated planned ingredients are combined.</p></div></section>
     <div className="grocery-progress"><i><b style={{ width: `${percent}%` }} /></i><span>{percent}%</span></div>
 
     <div className="grocery-toolbar">
