@@ -60,9 +60,20 @@ import {
   waterDaysByDate,
   type WaterDay,
 } from "../lib/water-tracking";
+import {
+  isDateKey,
+  mealSlotLabels,
+  mealSlots,
+  mealsForWeek,
+  normalizeMealSlot,
+  shiftDateKey,
+  weekDateKeys,
+  weekStartKey,
+  type MealSlot,
+} from "../lib/weekly-plan";
 
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
-type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string; ingredients?: PlannedIngredient[] };
+type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string; ingredients?: PlannedIngredient[]; plannedDate?: string; mealSlot?: MealSlot };
 type LabelNutrition = { productName: string; energyValue: number; energyUnit: "kcal" | "kJ"; carbs: number; protein: number; fat: number; fibre: number };
 type SavedPackagedProduct = LabelNutrition & { id: string; updatedAt: number };
 type LabelNutritionDraft = Omit<LabelNutrition, "energyValue" | "carbs" | "protein" | "fat" | "fibre"> & { energyValue: number | ""; carbs: number | ""; protein: number | ""; fat: number | ""; fibre: number | "" };
@@ -127,6 +138,8 @@ function normalizeStoredMeal(raw: any): Meal | null {
     locked: raw.locked ? true : undefined,
     color: String(raw.color || "salmon"),
     ingredients: normalizeStoredIngredients(raw.ingredients),
+    plannedDate: isDateKey(raw.plannedDate) ? raw.plannedDate : undefined,
+    mealSlot: normalizeMealSlot(raw.mealSlot),
   };
 }
 
@@ -340,6 +353,7 @@ export default function Home() {
   const [dataReady, setDataReady] = useState(false);
   const [mealHistory, setMealHistory] = useState<MealHistory>({});
   const [plannedMeals, setPlannedMeals] = useState<Meal[]>([]);
+  const [planWeekStart, setPlanWeekStart] = useState("");
   const [savedProducts, setSavedProducts] = useState<SavedPackagedProduct[]>([]);
   const [recentFoods, setRecentFoods] = useState<ManualFoodItem[]>([]);
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
@@ -424,12 +438,14 @@ export default function Home() {
 
       const loadedProfile = data as NutriPathProfile;
       const today = localDateKey();
+      const currentPlanWeek = weekStartKey(today);
       const historyCacheKey = userStorageKey(MEAL_HISTORY_KEY, userData.user.id);
       const productsCacheKey = userStorageKey(SAVED_PRODUCTS_KEY, userData.user.id);
 
       setProfile(loadedProfile);
       setUserId(userData.user.id);
       setSelectedDate(today);
+      setPlanWeekStart(currentPlanWeek);
 
       try {
         const cloud = await loadCloudState(supabase, userData.user.id);
@@ -442,7 +458,7 @@ export default function Home() {
         setPlannedMeals(cloudPlan);
         setSavedProducts(cloudProducts);
         try {
-          const accountGrocery = await reconcilePlannedGroceryItems(supabase, userData.user.id, cloudPlan);
+          const accountGrocery = await reconcilePlannedGroceryItems(supabase, userData.user.id, mealsForWeek(cloudPlan, currentPlanWeek));
           if (!active) return;
           setGroceryItems(accountGrocery);
         } catch {
@@ -541,10 +557,10 @@ export default function Home() {
     }
   }
 
-  async function refreshGroceryForPlan(planned: Meal[]) {
+  async function refreshGroceryForPlan(planned: Meal[], startKey = planWeekStart || weekStartKey()) {
     if (!userId) return false;
     try {
-      const items = await reconcilePlannedGroceryItems(createClient(), userId, planned);
+      const items = await reconcilePlannedGroceryItems(createClient(), userId, mealsForWeek(planned, startKey));
       setGroceryItems(items);
       setGroceryReady(true);
       return true;
@@ -811,10 +827,57 @@ export default function Home() {
     await saveMealState(nextHistory, plannedMeals, "This day’s progress is saved to your account");
   }
 
-  async function markPlannedMeal(id: number) {
-    const nextPlan = plannedMeals.map(meal => meal.id === id ? { ...meal, eaten: !meal.eaten } : meal);
+  async function updatePlannedMealSchedule(id: number, plannedDate: string | null, mealSlot?: MealSlot) {
+    if (plannedDate !== null && (!isDateKey(plannedDate) || !normalizeMealSlot(mealSlot))) {
+      return "Choose a valid date and meal slot.";
+    }
+    const nextPlan = plannedMeals.map(meal => meal.id === id
+      ? plannedDate === null
+        ? { ...meal, plannedDate: undefined, mealSlot: undefined }
+        : { ...meal, plannedDate, mealSlot }
+      : meal);
     setPlannedMeals(nextPlan);
-    await saveMealState(mealHistory, nextPlan, "Your planned meal is saved to your account");
+    const saved = await saveMealState(mealHistory, nextPlan, plannedDate === null ? "Meal returned to Unscheduled" : "Meal scheduled in your weekly plan");
+    if (saved) await refreshGroceryForPlan(nextPlan);
+    return saved ? "" : "The schedule was kept on this device, but account sync needs another update.";
+  }
+
+  async function removePlannedMeal(id: number) {
+    const meal = plannedMeals.find(item => item.id === id);
+    if (!meal) return;
+    const nextPlan = plannedMeals.filter(item => item.id !== id);
+    setPlannedMeals(nextPlan);
+    const saved = await saveMealState(mealHistory, nextPlan, `${meal.name} removed from My Plan`);
+    if (saved) await refreshGroceryForPlan(nextPlan);
+  }
+
+  async function logPlannedMeal(id: number) {
+    const meal = plannedMeals.find(item => item.id === id);
+    if (!meal) return;
+    const today = localDateKey();
+    const { plannedDate: _plannedDate, mealSlot, ...mealDetails } = meal;
+    const loggedMeal: Meal = {
+      ...mealDetails,
+      id: Date.now(),
+      type: mealSlot ? mealSlotLabels[mealSlot] : "Logged meal",
+      time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      eaten: true,
+      locked: undefined,
+    };
+    const nextHistory = { ...mealHistory, [today]: [...(mealHistory[today] || []), loggedMeal] };
+    const nextPlan = plannedMeals.filter(item => item.id !== id);
+    setMealHistory(nextHistory);
+    setPlannedMeals(nextPlan);
+    setSelectedDate(today);
+    const saved = await saveMealState(nextHistory, nextPlan, `${meal.name} logged as eaten today`);
+    if (saved) await refreshGroceryForPlan(nextPlan);
+    setTab("today");
+  }
+
+  async function openWeeklyGrocery(startKey: string) {
+    setPlanWeekStart(startKey);
+    await refreshGroceryForPlan(plannedMeals, startKey);
+    setTab("grocery");
   }
 
   async function saveWaterTotal(amountMl: number) {
@@ -1078,7 +1141,7 @@ export default function Home() {
             ? <div className="history-empty"><strong>Loading your NutriPath account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
             : <>
               {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
-              {tab === "plan" && <Plan meals={plannedMeals} onMeal={markPlannedMeal} notify={notify} onReviewGrocery={() => setTab("grocery")} />}
+              {tab === "plan" && <Plan meals={plannedMeals} weekStart={planWeekStart || weekStartKey()} onWeekChange={setPlanWeekStart} onSchedule={updatePlannedMealSchedule} onRemove={removePlannedMeal} onLog={logPlannedMeal} onReviewGrocery={openWeeklyGrocery} />}
               {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} onManual={openManualFood} />}
               {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
               {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />}
@@ -1449,15 +1512,115 @@ function MealCard({ meal, onMeal }: { meal: Meal; onMeal: (id: number) => void }
   </article>;
 }
 
-function Plan({ meals, onMeal, notify, onReviewGrocery }: { meals: Meal[]; onMeal: (id: number) => void; notify: (s: string) => void; onReviewGrocery: () => void }) {
-  const plannedCalories = meals.reduce((sum, meal) => sum + meal.calories, 0);
+function PlannedMealCard({ meal, defaultDate, onSchedule, onRemove, onLog }: {
+  meal: Meal;
+  defaultDate: string;
+  onSchedule: (id: number, plannedDate: string | null, mealSlot?: MealSlot) => Promise<string>;
+  onRemove: (id: number) => Promise<void>;
+  onLog: (id: number) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(!meal.plannedDate || !meal.mealSlot);
+  const [date, setDate] = useState(meal.plannedDate || defaultDate);
+  const [slot, setSlot] = useState<MealSlot>(meal.mealSlot || "breakfast");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setDate(meal.plannedDate || defaultDate);
+    setSlot(meal.mealSlot || "breakfast");
+  }, [meal.plannedDate, meal.mealSlot, defaultDate]);
+
+  async function saveSchedule() {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    const saveError = await onSchedule(meal.id, date, slot);
+    setSaving(false);
+    if (saveError) {
+      setError(saveError);
+      return;
+    }
+    setEditing(false);
+  }
+
+  async function logToday() {
+    if (saving) return;
+    setSaving(true);
+    await onLog(meal.id);
+    setSaving(false);
+  }
+
+  return <article className="weekly-plan-meal">
+    <div className="weekly-plan-meal-head"><div className={`meal-image ${meal.color}`}><span>{meal.mealSlot ? mealSlotLabels[meal.mealSlot].slice(0, 1) : "●"}</span></div><div><span>{meal.mealSlot ? mealSlotLabels[meal.mealSlot] : "Unscheduled"}</span><h3>{meal.name}</h3><p>{meal.calories} kcal · {meal.protein}g protein</p></div></div>
+    {editing && <div className="plan-schedule-editor">
+      <label><span>Date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
+      <label><span>Meal</span><select value={slot} onChange={event => setSlot(event.target.value as MealSlot)}>{mealSlots.map(value => <option key={value} value={value}>{mealSlotLabels[value]}</option>)}</select></label>
+      <button type="button" disabled={saving || !date} onClick={() => void saveSchedule()}>{saving ? "Saving…" : "Save schedule"}</button>
+      {meal.plannedDate && <button className="plan-unschedule" type="button" disabled={saving} onClick={() => void onSchedule(meal.id, null)}>Move to Unscheduled</button>}
+    </div>}
+    {error && <div className="plan-card-error" role="alert">{error}</div>}
+    <div className="weekly-plan-actions">
+      <button type="button" onClick={() => setEditing(value => !value)}>{editing ? "Close editor" : "Move"}</button>
+      <button type="button" disabled={saving} onClick={() => void logToday()}>Log as eaten today</button>
+      <button className="remove" type="button" disabled={saving} onClick={() => { if (window.confirm(`Remove ${meal.name} from My Plan?`)) void onRemove(meal.id); }}>Remove</button>
+    </div>
+  </article>;
+}
+
+function Plan({ meals, weekStart, onWeekChange, onSchedule, onRemove, onLog, onReviewGrocery }: {
+  meals: Meal[];
+  weekStart: string;
+  onWeekChange: (weekStart: string) => void;
+  onSchedule: (id: number, plannedDate: string | null, mealSlot?: MealSlot) => Promise<string>;
+  onRemove: (id: number) => Promise<void>;
+  onLog: (id: number) => Promise<void>;
+  onReviewGrocery: (weekStart: string) => Promise<void>;
+}) {
+  const activeWeekStart = isDateKey(weekStart) ? weekStart : weekStartKey();
+  const dates = weekDateKeys(activeWeekStart);
+  const today = localDateKey();
+  const [selectedPlanDate, setSelectedPlanDate] = useState(dates.includes(today) ? today : dates[0]);
+
+  useEffect(() => {
+    const nextDates = weekDateKeys(activeWeekStart);
+    setSelectedPlanDate(nextDates.includes(today) ? today : nextDates[0]);
+  }, [activeWeekStart, today]);
+
+  const weekMeals = mealsForWeek(meals, activeWeekStart);
+  const unscheduled = meals.filter(meal => !isDateKey(meal.plannedDate) || !normalizeMealSlot(meal.mealSlot));
+  const selectedMeals = weekMeals.filter(meal => meal.plannedDate === selectedPlanDate);
+  const plannedCalories = weekMeals.reduce((sum, meal) => sum + meal.calories, 0);
+  const weekEnd = dates[6];
+  const weekLabel = `${dateFromKey(activeWeekStart).toLocaleDateString([], { day: "numeric", month: "short" })}–${dateFromKey(weekEnd).toLocaleDateString([], { day: "numeric", month: "short" })}`;
+
+  function changeWeek(nextStart: string) {
+    onWeekChange(nextStart);
+    const nextDates = weekDateKeys(nextStart);
+    setSelectedPlanDate(nextDates.includes(today) ? today : nextDates[0]);
+  }
+
   return <>
-    <section className="plan-summary"><div><p className="eyebrow">SAVED MEAL PLAN</p><h2>{meals.length} {meals.length === 1 ? "meal" : "meals"} · {plannedCalories.toLocaleString()} kcal</h2><p>Planned meals stay here across different days until you decide to use or replace them.</p></div><button onClick={() => notify("Plan options opened")}>•••</button></section>
-    <div className="plan-toolbar"><span><b>Your reusable plan</b> · separate from food already eaten</span><button onClick={() => notify("Plan refreshed")}>↻ Refresh</button></div>
-    {meals.length > 0
-      ? <div className="meal-list plan-list">{meals.map(m => <div key={m.id} className="plan-meal"><MealCard meal={m} onMeal={onMeal} /><div className="plan-actions"><button onClick={() => notify("3 similar alternatives ready")}>Replace</button><button onClick={() => notify("Portion editor opened")}>Edit portion</button><button onClick={() => notify(m.locked ? "Meal unlocked" : "Meal locked")}>{m.locked ? "Unlock" : "Lock"}</button></div></div>)}</div>
-      : <div className="history-empty"><strong>No meals in your plan yet.</strong><span>Analyze a meal and select Add to plan.</span></div>}
-    <button className="wide-button" onClick={onReviewGrocery}>Review grocery list <span>→</span></button>
+    <section className="plan-summary weekly-plan-summary"><div><p className="eyebrow">WEEKLY MEAL PLAN</p><h2>{weekMeals.length} {weekMeals.length === 1 ? "meal" : "meals"} · {plannedCalories.toLocaleString()} kcal</h2><p>{weekLabel}. Planned calories remain separate from food already eaten.</p></div><span>{unscheduled.length} unscheduled</span></section>
+
+    <div className="week-navigation"><button type="button" aria-label="Previous week" onClick={() => changeWeek(shiftDateKey(activeWeekStart, -7))}>‹</button><div><strong>{weekLabel}</strong><button type="button" onClick={() => changeWeek(weekStartKey(today))}>This week</button></div><button type="button" aria-label="Next week" onClick={() => changeWeek(shiftDateKey(activeWeekStart, 7))}>›</button></div>
+
+    <div className="week-date-strip">{dates.map(date => {
+      const count = weekMeals.filter(meal => meal.plannedDate === date).length;
+      const active = date === selectedPlanDate;
+      return <button type="button" key={date} className={active ? "active" : ""} onClick={() => setSelectedPlanDate(date)}><span>{dateFromKey(date).toLocaleDateString([], { weekday: "short" }).slice(0, 2)}</span><strong>{dateFromKey(date).getDate()}</strong><small>{count || ""}</small></button>;
+    })}</div>
+
+    <section className="weekly-day-plan"><div className="section-heading"><div><p className="eyebrow">SELECTED DAY</p><h2>{dateFromKey(selectedPlanDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}</h2></div><span>{selectedMeals.reduce((sum, meal) => sum + meal.calories, 0).toLocaleString()} kcal</span></div>
+      {mealSlots.map(slot => {
+        const slotMeals = selectedMeals.filter(meal => meal.mealSlot === slot);
+        return <div className="meal-slot" key={slot}><div className="meal-slot-heading"><strong>{mealSlotLabels[slot]}</strong><span>{slotMeals.length ? `${slotMeals.length} ${slotMeals.length === 1 ? "meal" : "meals"}` : "Empty"}</span></div>{slotMeals.length ? slotMeals.map(meal => <PlannedMealCard key={meal.id} meal={meal} defaultDate={selectedPlanDate} onSchedule={onSchedule} onRemove={onRemove} onLog={onLog} />) : <p>No {mealSlotLabels[slot].toLowerCase()} planned.</p>}</div>;
+      })}
+    </section>
+
+    <section className="unscheduled-plan"><div className="section-heading"><div><p className="eyebrow">READY TO SCHEDULE</p><h2>Unscheduled meals</h2></div><span>{unscheduled.length}</span></div>{unscheduled.length ? <div className="weekly-unscheduled-list">{unscheduled.map(meal => <PlannedMealCard key={meal.id} meal={meal} defaultDate={selectedPlanDate} onSchedule={onSchedule} onRemove={onRemove} onLog={onLog} />)}</div> : <div className="history-empty"><strong>All planned meals are scheduled.</strong><span>Add another meal from Log Food when you are ready.</span></div>}</section>
+
+    {meals.length === 0 && <div className="history-empty"><strong>No meals in your plan yet.</strong><span>Analyze or manually enter a meal, then select Add to plan.</span></div>}
+    <button className="wide-button" onClick={() => void onReviewGrocery(activeWeekStart)}>Review this week’s grocery list <span>→</span></button>
   </>;
 }
 

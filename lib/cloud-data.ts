@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isDateKey, normalizeMealSlot, type MealSlot } from "./weekly-plan";
 
 export type CloudMeal = {
   id: number;
@@ -13,6 +14,8 @@ export type CloudMeal = {
   locked?: boolean;
   color: string;
   ingredients?: CloudMealIngredient[];
+  plannedDate?: string;
+  mealSlot?: MealSlot;
 };
 
 export type CloudMealIngredient = {
@@ -63,7 +66,7 @@ export async function loadCloudState(supabase: SupabaseClient, userId: string) {
   const [mealsResult, productsResult] = await Promise.all([
     supabase
       .from("meal_entries")
-      .select("client_id,entry_kind,meal_date,meal_type,name,calories,protein,carbs,fat,meal_time,eaten,locked,color,ingredients")
+      .select("client_id,entry_kind,meal_date,meal_slot,meal_type,name,calories,protein,carbs,fat,meal_time,eaten,locked,color,ingredients")
       .eq("user_id", userId)
       .order("created_at", { ascending: true }),
     supabase
@@ -93,6 +96,8 @@ export async function loadCloudState(supabase: SupabaseClient, userId: string) {
       locked: row.locked ? true : undefined,
       color: String(row.color || "salmon"),
       ingredients: normalizeMealIngredients(row.ingredients),
+      plannedDate: row.entry_kind === "planned" && isDateKey(row.meal_date) ? String(row.meal_date) : undefined,
+      mealSlot: row.entry_kind === "planned" ? normalizeMealSlot(row.meal_slot) : undefined,
     };
     if (row.entry_kind === "planned") {
       planned.push(meal);
@@ -142,13 +147,15 @@ export async function syncCloudMeals(
       locked: Boolean(meal.locked),
       color: meal.color,
       ingredients: normalizeMealIngredients(meal.ingredients),
+      meal_slot: null,
     }))),
     ...planned.map(meal => ({
       user_id: userId,
       client_key: `planned:${meal.id}`,
       client_id: meal.id,
       entry_kind: "planned",
-      meal_date: null,
+      meal_date: meal.plannedDate || null,
+      meal_slot: meal.mealSlot || null,
       meal_type: meal.type,
       name: meal.name,
       calories: meal.calories,
@@ -167,6 +174,26 @@ export async function syncCloudMeals(
     const { error } = await supabase
       .from("meal_entries")
       .upsert(mealRows, { onConflict: "user_id,client_key" });
+    if (error) throw error;
+  }
+
+  const activePlannedKeys = new Set(planned.map(meal => `planned:${meal.id}`));
+  const { data: storedPlanned, error: plannedReadError } = await supabase
+    .from("meal_entries")
+    .select("client_key")
+    .eq("user_id", userId)
+    .eq("entry_kind", "planned");
+  if (plannedReadError) throw plannedReadError;
+  const stalePlannedKeys = (storedPlanned || [])
+    .map(row => String(row.client_key || ""))
+    .filter(key => key && !activePlannedKeys.has(key));
+  if (stalePlannedKeys.length) {
+    const { error } = await supabase
+      .from("meal_entries")
+      .delete()
+      .eq("user_id", userId)
+      .eq("entry_kind", "planned")
+      .in("client_key", stalePlannedKeys);
     if (error) throw error;
   }
 
