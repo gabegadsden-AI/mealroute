@@ -1,5 +1,5 @@
 "use client";
-import "./../auth.css";
+import "../../auth.css";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
