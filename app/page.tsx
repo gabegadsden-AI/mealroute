@@ -75,6 +75,7 @@ import {
   loadFoodPreferences,
   addFoodPreference,
   deleteFoodPreference,
+  updateFoodPreferenceSlots,
   type FoodPreference,
 } from "../lib/food-preferences";
 import FoodPalette, { type PaletteFood } from "./components/FoodPalette";
@@ -448,7 +449,7 @@ export default function Home() {
       if (!active) return;
 
       if (userError || !userData.user) {
-        window.location.replace("/landing");
+        window.location.replace("/auth/login");
         return;
       }
 
@@ -609,6 +610,17 @@ export default function Home() {
     if (!userData.user) return;
     await deleteFoodPreference(supabase, userData.user.id, id);
     setFoodPalette(prev => prev.filter(item => item.id !== id));
+  }
+
+  async function handleUpdatePaletteSlots(id: string, slots: string[]) {
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+    await updateFoodPreferenceSlots(supabase, userData.user.id, id, slots);
+    setFoodPalette(prev => prev.map(item =>
+      item.id === id ? { ...item, preferredSlots: slots } : item
+    ));
+    notify("Meal assignment saved");
   }
 
   async function handleGeneratePlan(days: number) {
@@ -985,7 +997,7 @@ export default function Home() {
       notify("NutriPath could not log you out. Please try again.");
       return;
     }
-    window.location.replace("/landing");
+    window.location.replace("/auth/login");
   }
 
   async function markMeal(id: number) {
@@ -1378,6 +1390,7 @@ export default function Home() {
                         preferredSlots: f.preferredSlots,
                       }))}
                       onAdd={handleAddPaletteFood}
+                      onUpdateSlots={handleUpdatePaletteSlots}
                       onDelete={handleDeletePaletteFood}
                     />
                   )}
