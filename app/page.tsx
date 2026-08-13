@@ -71,8 +71,17 @@ import {
   weekStartKey,
   type MealSlot,
 } from "../lib/weekly-plan";
+import {
+  loadFoodPreferences,
+  addFoodPreference,
+  deleteFoodPreference,
+  type FoodPreference,
+} from "../lib/food-preferences";
+import FoodPalette, { type PaletteFood } from "./components/FoodPalette";
+import PlanReview, { type PlanMeal, type GeneratedPlan } from "./components/PlanReview";
 
 type Tab = "today" | "plan" | "log" | "grocery" | "progress";
+type PlanSubView = "week" | "palette" | "review";
 type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string; ingredients?: PlannedIngredient[]; plannedDate?: string; mealSlot?: MealSlot };
 type LabelNutrition = { productName: string; energyValue: number; energyUnit: "kcal" | "kJ"; carbs: number; protein: number; fat: number; fibre: number };
 type SavedPackagedProduct = LabelNutrition & { id: string; updatedAt: number };
@@ -391,6 +400,11 @@ export default function Home() {
   const [analysis, setAnalysis] = useState<FoodAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+  const [foodPalette, setFoodPalette] = useState<FoodPreference[]>([]);
+  const [planSubView, setPlanSubView] = useState<PlanSubView>("week");
+  const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlan | null>(null);
+  const [planError, setPlanError] = useState("");
 
   const meals = selectedDate ? mealHistory[selectedDate] || [] : [];
   const totals = mealTotals(meals);
@@ -540,6 +554,15 @@ export default function Home() {
         notify("Recent foods could not be loaded. Food search is still available.");
       }
 
+      try {
+        const cloudPalette = await loadFoodPreferences(supabase, userData.user.id);
+        if (!active) return;
+        setFoodPalette(cloudPalette);
+      } catch {
+        if (!active) return;
+        // Food palette is optional — plan generation will prompt to add foods.
+      }
+
       if (loadedProfile.local_import_status !== "imported") {
         try {
           const legacy = readLegacyImportData();
@@ -560,6 +583,118 @@ export default function Home() {
       active = false;
     };
   }, []);
+
+  async function handleAddPaletteFood(food: Omit<PaletteFood, "id">) {
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+    const added = await addFoodPreference(supabase, userData.user.id, {
+      foodName: food.foodName,
+      fdcId: food.fdcId,
+      caloriesPer100g: food.caloriesPer100g,
+      proteinPer100g: food.proteinPer100g,
+      carbsPer100g: food.carbsPer100g,
+      fatPer100g: food.fatPer100g,
+      fibrePer100g: food.fibrePer100g,
+      category: food.category,
+      preferredSlots: food.preferredSlots,
+    });
+    setFoodPalette(prev => [...prev, added]);
+    notify(`${food.foodName} added to your food palette`);
+  }
+
+  async function handleDeletePaletteFood(id: string) {
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+    await deleteFoodPreference(supabase, userData.user.id, id);
+    setFoodPalette(prev => prev.filter(item => item.id !== id));
+  }
+
+  async function handleGeneratePlan(days: number) {
+    setGeneratingPlan(true);
+    setPlanError("");
+    try {
+      const res = await fetch("/api/generate-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setPlanError(data.error);
+        return;
+      }
+      setGeneratedPlan(data as GeneratedPlan);
+      setPlanSubView("review");
+    } catch {
+      setPlanError("Could not generate plan. Please try again.");
+    } finally {
+      setGeneratingPlan(false);
+    }
+  }
+
+  async function handleAcceptPlan() {
+    if (!generatedPlan) return;
+    const newPlanned: Meal[] = generatedPlan.meals.map((meal: PlanMeal) => ({
+      id: Date.now() + Math.random() * 100000,
+      type: "Planned meal",
+      name: meal.foodName,
+      calories: meal.calories,
+      protein: meal.protein,
+      carbs: meal.carbs,
+      fat: meal.fat,
+      time: "",
+      eaten: false,
+      color: "salmon",
+      plannedDate: meal.date,
+      mealSlot: meal.slot as MealSlot,
+    }));
+
+    const mergedPlan = mergeMealLists(plannedMeals, newPlanned);
+    setPlannedMeals(mergedPlan);
+    const saved = await saveMealState(mealHistory, mergedPlan, "AI plan accepted and saved to your weekly plan");
+    if (saved) await refreshGroceryForPlan(mergedPlan);
+
+    setGeneratedPlan(null);
+    setPlanSubView("week");
+    notify(`Plan accepted! ${newPlanned.length} meals added to your weekly plan.`);
+  }
+
+  function handleRejectPlan() {
+    setGeneratedPlan(null);
+    setPlanSubView("week");
+    notify("Plan discarded. Try generating again with different foods.");
+  }
+
+  function handleRegenerateMeal(date: string, slot: string) {
+    // Phase 2: individual meal regeneration via AI
+    // For now, just remove the meal from the generated plan
+    if (!generatedPlan) return;
+    const updated = {
+      ...generatedPlan,
+      meals: generatedPlan.meals.filter(m => !(m.date === date && m.slot === slot)),
+    };
+    // Recalculate daily totals
+    const totalsMap = new Map<string, { calories: number; protein: number; carbs: number; fat: number }>();
+    for (const m of updated.meals) {
+      const t = totalsMap.get(m.date) || { calories: 0, protein: 0, carbs: 0, fat: 0 };
+      t.calories += Math.round(m.calories);
+      t.protein = Math.round((t.protein + m.protein) * 10) / 10;
+      t.carbs = Math.round((t.carbs + m.carbs) * 10) / 10;
+      t.fat = Math.round((t.fat + m.fat) * 10) / 10;
+      totalsMap.set(m.date, t);
+    }
+    updated.dailyTotals = Array.from(totalsMap.entries()).map(([date, t]) => ({
+      date,
+      calories: Math.round(t.calories),
+      protein: Math.round(t.protein * 10) / 10,
+      carbs: Math.round(t.carbs * 10) / 10,
+      fat: Math.round(t.fat * 10) / 10,
+    }));
+    setGeneratedPlan(updated);
+    notify("Meal removed. Accept the plan without it or start over.");
+  }
 
   function notify(message: string) {
     setToast(message);
@@ -1180,7 +1315,86 @@ export default function Home() {
             ? <div className="history-empty"><strong>Loading your NutriPath account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
             : <>
               {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
-              {tab === "plan" && <Plan meals={plannedMeals} weekStart={planWeekStart || weekStartKey()} onWeekChange={setPlanWeekStart} onSchedule={updatePlannedMealSchedule} onRemove={removePlannedMeal} onLog={logPlannedMeal} onReviewGrocery={openWeeklyGrocery} />}
+              {tab === "plan" && (
+                <>
+                  <div className="plan-sub-nav" style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
+                    <button className={planSubView === "week" ? "active" : ""} style={{
+                      flex: 1, padding: "10px", borderRadius: "12px", fontSize: "11px", fontWeight: 700,
+                      border: planSubView === "week" ? "1px solid var(--green)" : "1px solid #2c352f",
+                      background: planSubView === "week" ? "rgba(169,244,122,0.1)" : "transparent",
+                      color: planSubView === "week" ? "var(--green)" : "#8e9a91",
+                    }} onClick={() => setPlanSubView("week")}>Weekly Plan</button>
+                    <button className={planSubView === "palette" ? "active" : ""} style={{
+                      flex: 1, padding: "10px", borderRadius: "12px", fontSize: "11px", fontWeight: 700,
+                      border: planSubView === "palette" ? "1px solid var(--green)" : "1px solid #2c352f",
+                      background: planSubView === "palette" ? "rgba(169,244,122,0.1)" : "transparent",
+                      color: planSubView === "palette" ? "var(--green)" : "#8e9a91",
+                    }} onClick={() => setPlanSubView("palette")}>My Foods ({foodPalette.length})</button>
+                  </div>
+                  {planSubView === "week" && (
+                    <>
+                      <div style={{
+                        background: "linear-gradient(130deg,#1a241d,#101612)",
+                        border: "1px solid #2d392f",
+                        borderRadius: "22px",
+                        padding: "20px",
+                        marginBottom: "16px",
+                      }}>
+                        <p className="eyebrow" style={{ margin: "0 0 6px" }}>AI PLAN GENERATOR</p>
+                        <h2 style={{ fontSize: "18px", margin: "0 0 8px", letterSpacing: "-.03em" }}>Let NutriPath plan your week</h2>
+                        <p style={{ color: "#8e9a91", fontSize: "12px", margin: "0 0 14px", lineHeight: 1.5 }}>
+                          {foodPalette.length < 3
+                            ? "Add at least 3 foods to your palette, then generate a balanced meal plan in seconds."
+                            : "Generate a balanced meal plan from your food palette, calibrated to your calorie and macro targets."}
+                        </p>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          {[3, 5, 7].map(d => (
+                            <button key={d} disabled={generatingPlan || foodPalette.length < 3} onClick={() => void handleGeneratePlan(d)} style={{
+                              flex: 1, padding: "12px", borderRadius: "14px", fontSize: "12px", fontWeight: 700,
+                              border: foodPalette.length < 3 ? "1px solid #2c352f" : "none",
+                              background: foodPalette.length < 3 ? "transparent" : "var(--green)",
+                              color: foodPalette.length < 3 ? "#566158" : "#101810",
+                              opacity: generatingPlan ? 0.6 : 1,
+                            }}>{generatingPlan ? "..." : `${d} days`}</button>
+                          ))}
+                        </div>
+                        {planError && <p style={{ color: "#ee9e78", fontSize: "11px", margin: "12px 0 0" }}>{planError}</p>}
+                      </div>
+                      <Plan meals={plannedMeals} weekStart={planWeekStart || weekStartKey()} onWeekChange={setPlanWeekStart} onSchedule={updatePlannedMealSchedule} onRemove={removePlannedMeal} onLog={logPlannedMeal} onReviewGrocery={openWeeklyGrocery} />
+                    </>
+                  )}
+                  {planSubView === "palette" && (
+                    <FoodPalette
+                      palette={foodPalette.map(f => ({
+                        id: f.id,
+                        foodName: f.foodName,
+                        fdcId: f.fdcId,
+                        caloriesPer100g: f.caloriesPer100g,
+                        proteinPer100g: f.proteinPer100g,
+                        carbsPer100g: f.carbsPer100g,
+                        fatPer100g: f.fatPer100g,
+                        fibrePer100g: f.fibrePer100g,
+                        category: f.category,
+                        preferredSlots: f.preferredSlots,
+                      }))}
+                      onAdd={handleAddPaletteFood}
+                      onDelete={handleDeletePaletteFood}
+                    />
+                  )}
+                  {planSubView === "review" && generatedPlan && (
+                    <PlanReview
+                      plan={generatedPlan}
+                      calorieGoal={target}
+                      proteinGoal={macroTargets.protein}
+                      carbsGoal={macroTargets.carbs}
+                      fatGoal={macroTargets.fat}
+                      onAccept={handleAcceptPlan}
+                      onReject={handleRejectPlan}
+                      onRegenerateMeal={handleRegenerateMeal}
+                    />
+                  )}
+                </>
+              )}
               {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} onManual={openManualFood} />}
               {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} weekLabel={groceryWeekLabel} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
               {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />}
@@ -1188,7 +1402,7 @@ export default function Home() {
         </div>
 
         <nav className="bottom-nav" aria-label="Main navigation">
-          {navItems.map(item => <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}><span>{item.icon}</span><small>{item.label}</small></button>)}
+          {navItems.map(item => <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => { setTab(item.id); if (item.id !== "plan") setPlanSubView("week"); }}><span>{item.icon}</span><small>{item.label}</small></button>)}
         </nav>
       </section>
 
