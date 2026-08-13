@@ -448,7 +448,7 @@ export default function Home() {
       if (!active) return;
 
       if (userError || !userData.user) {
-        window.location.replace("/auth/login");
+        window.location.replace("/landing");
         return;
       }
 
@@ -985,7 +985,7 @@ export default function Home() {
       notify("NutriPath could not log you out. Please try again.");
       return;
     }
-    window.location.replace("/auth/login");
+    window.location.replace("/landing");
   }
 
   async function markMeal(id: number) {
