@@ -29,6 +29,7 @@ type Props = {
   palette: PaletteFood[];
   onAdd: (food: Omit<PaletteFood, "id">) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onUpdateSlots: (id: string, slots: string[]) => Promise<void>;
 };
 
 const allSlots = ["breakfast", "lunch", "dinner", "snack"];
@@ -37,6 +38,13 @@ const slotLabels: Record<string, string> = {
   lunch: "Lunch",
   dinner: "Dinner",
   snack: "Snack",
+};
+
+const slotIcons: Record<string, string> = {
+  breakfast: "☀",
+  lunch: "☀",
+  dinner: "☾",
+  snack: "✦",
 };
 
 function groceryCategory(name: string): string {
@@ -48,13 +56,14 @@ function groceryCategory(name: string): string {
   return "Other";
 }
 
-export default function FoodPalette({ palette, onAdd, onDelete }: Props) {
+export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<USDSASearchResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const [selectedSlots, setSelectedSlots] = useState<string[]>(allSlots);
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
+  const [expandedFoodId, setExpandedFoodId] = useState<string | null>(null);
+  const [savingSlots, setSavingSlots] = useState(false);
 
   const searchFoods = async () => {
     const query = searchQuery.trim();
@@ -94,7 +103,7 @@ export default function FoodPalette({ palette, onAdd, onDelete }: Props) {
         fatPer100g: result.fatPer100g,
         fibrePer100g: result.fibrePer100g,
         category: groceryCategory(result.name),
-        preferredSlots: selectedSlots,
+        preferredSlots: allSlots, // default to all slots, user assigns after
       });
       setSearchResults(prev => prev.filter(r => r.fdcId !== result.fdcId));
     } catch (err) {
@@ -104,18 +113,32 @@ export default function FoodPalette({ palette, onAdd, onDelete }: Props) {
     }
   };
 
-  const toggleSlot = (slot: string) => {
-    setSelectedSlots(prev =>
-      prev.includes(slot) ? prev.filter(s => s !== slot) : [...prev, slot]
-    );
+  const toggleSlot = async (foodId: string, slot: string) => {
+    const food = palette.find(f => f.id === foodId);
+    if (!food) return;
+    const current = food.preferredSlots;
+    const updated = current.includes(slot)
+      ? current.filter(s => s !== slot)
+      : [...current, slot];
+    // Optimistic update is handled by parent via onUpdateSlots
+    setSavingSlots(true);
+    try {
+      await onUpdateSlots(foodId, updated);
+    } catch {
+      setError("Could not update meal assignment.");
+    } finally {
+      setSavingSlots(false);
+    }
   };
+
+  const hasEnoughFoods = palette.length >= 3;
 
   return (
     <div style={{ padding: "0 0 20px" }}>
       <div style={{ marginBottom: "20px" }}>
         <h2 style={{ fontSize: "20px", letterSpacing: "-.03em", margin: "0 0 4px" }}>My Foods</h2>
         <p style={{ color: "#8e9a91", fontSize: "11px", margin: 0 }}>
-          Add foods you enjoy. We&apos;ll use these to build your meal plans.
+          Add foods you enjoy, then assign them to meals. We&apos;ll use these to build your meal plans.
         </p>
       </div>
 
@@ -158,34 +181,6 @@ export default function FoodPalette({ palette, onAdd, onDelete }: Props) {
           </button>
         </div>
       </div>
-
-      {/* Slot selector for new foods */}
-      {searchResults.length > 0 && (
-        <div style={{ marginBottom: "14px" }}>
-          <p style={{ color: "#8e9a91", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".07em", margin: "0 0 8px" }}>
-            Works for which meals?
-          </p>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            {allSlots.map(slot => (
-              <button
-                key={slot}
-                onClick={() => toggleSlot(slot)}
-                style={{
-                  border: `1px solid ${selectedSlots.includes(slot) ? "var(--green)" : "#2c352f"}`,
-                  borderRadius: "10px",
-                  background: selectedSlots.includes(slot) ? "rgba(169,244,122,0.1)" : "transparent",
-                  color: selectedSlots.includes(slot) ? "var(--green)" : "#8e9a91",
-                  padding: "5px 12px",
-                  fontSize: "10px",
-                  fontWeight: 600,
-                }}
-              >
-                {slotLabels[slot]}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {error && (
         <p style={{ color: "#ee9e78", fontSize: "11px", margin: "0 0 12px" }}>{error}</p>
@@ -249,6 +244,7 @@ export default function FoodPalette({ palette, onAdd, onDelete }: Props) {
         <p style={{ color: "#8e9a91", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".07em", margin: "0 0 10px" }}>
           Your Food Palette ({palette.length})
         </p>
+
         {palette.length === 0 && (
           <div style={{
             textAlign: "center",
@@ -261,47 +257,158 @@ export default function FoodPalette({ palette, onAdd, onDelete }: Props) {
             No foods yet. Search above to add foods you enjoy.
           </div>
         )}
-        {palette.map(food => (
-          <div
-            key={food.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              padding: "10px",
-              marginBottom: "6px",
-              background: "var(--panel)",
-              border: "1px solid #242d27",
-              borderRadius: "14px",
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h4 style={{ fontSize: "12px", margin: "0 0 3px" }}>{food.foodName}</h4>
-              <p style={{ color: "#98a49b", fontSize: "9px", margin: 0 }}>
-                {food.caloriesPer100g} kcal / 100g
-                {" · "}
-                {food.preferredSlots.map(s => slotLabels[s]?.charAt(0) || "").join("")}
-              </p>
-            </div>
-            <button
-              onClick={() => onDelete(food.id)}
+
+        {palette.map(food => {
+          const isExpanded = expandedFoodId === food.id;
+          return (
+            <div
+              key={food.id}
               style={{
-                width: "28px",
-                height: "28px",
-                borderRadius: "10px",
-                border: "1px solid #465149",
-                background: "transparent",
-                color: "#8e9a91",
-                fontSize: "14px",
-                display: "grid",
-                placeItems: "center",
-                flex: "0 0 28px",
+                marginBottom: "8px",
+                background: "var(--panel)",
+                border: `1px solid ${isExpanded ? "var(--green)" : "#242d27"}`,
+                borderRadius: "16px",
+                overflow: "hidden",
+                transition: "border-color .2s",
               }}
             >
-              ✕
-            </button>
+              {/* Food row */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  padding: "10px",
+                  cursor: "pointer",
+                }}
+                onClick={() => setExpandedFoodId(isExpanded ? null : food.id)}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h4 style={{ fontSize: "12px", margin: "0 0 3px" }}>{food.foodName}</h4>
+                  <p style={{ color: "#98a49b", fontSize: "9px", margin: 0 }}>
+                    {food.caloriesPer100g} kcal / 100g
+                    {" · "}
+                    {food.preferredSlots.length === allSlots.length
+                      ? "All meals"
+                      : food.preferredSlots.map(s => slotLabels[s]).join(", ")}
+                  </p>
+                </div>
+                {/* Slot badges */}
+                <div style={{ display: "flex", gap: "4px", flex: "0 0 auto" }}>
+                  {allSlots.map(slot => {
+                    const active = food.preferredSlots.includes(slot);
+                    return (
+                      <span
+                        key={slot}
+                        style={{
+                          width: "24px",
+                          height: "24px",
+                          borderRadius: "8px",
+                          display: "grid",
+                          placeItems: "center",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          background: active ? "rgba(169,244,122,0.15)" : "transparent",
+                          color: active ? "var(--green)" : "#465149",
+                          border: `1px solid ${active ? "var(--green)" : "#2c352f"}`,
+                        }}
+                      >
+                        {slot.charAt(0).toUpperCase()}
+                      </span>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDelete(food.id); }}
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "10px",
+                    border: "1px solid #465149",
+                    background: "transparent",
+                    color: "#8e9a91",
+                    fontSize: "14px",
+                    display: "grid",
+                    placeItems: "center",
+                    flex: "0 0 28px",
+                    cursor: "pointer",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Expanded slot assignment */}
+              {isExpanded && (
+                <div style={{
+                  padding: "0 12px 14px",
+                  borderTop: "1px solid #242d27",
+                  paddingTop: "14px",
+                }}>
+                  <p style={{
+                    color: "#8e9a91",
+                    fontSize: "9px",
+                    textTransform: "uppercase",
+                    letterSpacing: ".07em",
+                    margin: "0 0 10px",
+                  }}>
+                    Assign to meals {savingSlots && "· Saving..."}
+                  </p>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {allSlots.map(slot => {
+                      const active = food.preferredSlots.includes(slot);
+                      return (
+                        <button
+                          key={slot}
+                          onClick={() => toggleSlot(food.id, slot)}
+                          style={{
+                            flex: 1,
+                            border: `1px solid ${active ? "var(--green)" : "#2c352f"}`,
+                            borderRadius: "12px",
+                            background: active ? "rgba(169,244,122,0.12)" : "transparent",
+                            color: active ? "var(--green)" : "#8e9a91",
+                            padding: "10px 6px",
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            transition: "all .2s",
+                          }}
+                        >
+                          {slotLabels[slot]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Ready indicator */}
+        {palette.length > 0 && (
+          <div style={{
+            marginTop: "16px",
+            padding: "14px",
+            borderRadius: "16px",
+            background: hasEnoughFoods
+              ? "linear-gradient(130deg,#1a241d,#101612)"
+              : "#101512",
+            border: `1px solid ${hasEnoughFoods ? "#2d392f" : "#242c26"}`,
+            textAlign: "center",
+          }}>
+            <p style={{
+              margin: 0,
+              fontSize: "12px",
+              color: hasEnoughFoods ? "var(--green)" : "#8e9a91",
+              fontWeight: 600,
+            }}>
+              {hasEnoughFoods
+                ? "✓ Ready! Go to Weekly Plan to generate your AI meal plan."
+                : `Add ${3 - palette.length} more food${3 - palette.length === 1 ? "" : "s"} to unlock AI plan generation.`}
+            </p>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
