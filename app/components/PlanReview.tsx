@@ -44,6 +44,13 @@ const slotLabels: Record<string, string> = {
   snack: "Snack",
 };
 
+const slotIcons: Record<string, string> = {
+  breakfast: "☀",
+  lunch: "☀",
+  dinner: "☾",
+  snack: "✦",
+};
+
 const slotOrder = ["breakfast", "lunch", "dinner", "snack"];
 
 function dateLabel(dateStr: string) {
@@ -54,9 +61,9 @@ function dateLabel(dateStr: string) {
 
 function calorieColor(actual: number, target: number) {
   const pct = (actual / target) * 100;
-  if (pct >= 85 && pct <= 115) return "#a9f47a"; // green
-  if (pct >= 70 && pct <= 130) return "#f0a467"; // orange
-  return "#ee9e78"; // salmon
+  if (pct >= 85 && pct <= 115) return "#a9f47a";
+  if (pct >= 70 && pct <= 130) return "#f0a467";
+  return "#ee9e78";
 }
 
 export default function PlanReview({
@@ -80,7 +87,7 @@ export default function PlanReview({
     });
   };
 
-  // Group meals by date
+  // Group meals by date → slot → foods
   const byDate = new Map<string, PlanMeal[]>();
   for (const meal of plan.meals) {
     const arr = byDate.get(meal.date) || [];
@@ -88,8 +95,21 @@ export default function PlanReview({
     byDate.set(meal.date, arr);
   }
 
+  // Further group by slot within each date
+  const byDateSlot = new Map<string, Map<string, PlanMeal[]>>();
+  for (const [date, meals] of byDate) {
+    const slotMap = new Map<string, PlanMeal[]>();
+    for (const meal of meals) {
+      const arr = slotMap.get(meal.slot) || [];
+      arr.push(meal);
+      slotMap.set(meal.slot, arr);
+    }
+    byDateSlot.set(date, slotMap);
+  }
+
   const dates = Array.from(byDate.keys()).sort();
-  const acceptedMeals = plan.meals.filter(m => !rejectedMeals.has(`${m.date}-${m.slot}`));
+  const mealKey = (m: PlanMeal) => `${m.date}-${m.slot}-${m.foodName}`;
+  const acceptedMeals = plan.meals.filter(m => !rejectedMeals.has(mealKey(m)));
 
   // Recalculate daily totals excluding rejected meals
   const acceptedTotals = new Map<string, { calories: number; protein: number; carbs: number; fat: number }>();
@@ -106,13 +126,11 @@ export default function PlanReview({
     <div className="plan-review-overlay" style={{ padding: "0 0 40px" }}>
       <div className="plan-review-header" style={{ textAlign: "center", marginBottom: "24px" }}>
         <h2 style={{ fontSize: "24px", letterSpacing: "-.04em", margin: "0 0 6px" }}>Your AI-Generated Plan</h2>
-        <p style={{ color: "#8e9a91", fontSize: "12px", margin: 0 }}>Review each meal. Tap to reject what you don&apos;t want, then accept the plan.</p>
+        <p style={{ color: "#8e9a91", fontSize: "12px", margin: 0 }}>Review each meal. Tap to reject items you don&apos;t want, then accept the plan.</p>
       </div>
 
       {dates.map(date => {
-        const dayMeals = (byDate.get(date) || []).sort(
-          (a, b) => slotOrder.indexOf(a.slot) - slotOrder.indexOf(b.slot)
-        );
+        const slotMap = byDateSlot.get(date)!;
         const totals = acceptedTotals.get(date) || { calories: 0, protein: 0, carbs: 0, fat: 0 };
         const calColor = calorieColor(totals.calories, calorieGoal);
 
@@ -124,7 +142,7 @@ export default function PlanReview({
               alignItems: "center",
               marginBottom: "12px",
             }}>
-              <h3 style={{ fontSize: "16px, margin: 0" }}>{dateLabel(date)}</h3>
+              <h3 style={{ fontSize: "16px", margin: 0 }}>{dateLabel(date)}</h3>
               <div style={{ display: "flex", gap: "12px", fontSize: "10px", color: "#8e9a91" }}>
                 <span>
                   <strong style={{ color: calColor }}>{totals.calories}</strong> / {calorieGoal} kcal
@@ -135,85 +153,97 @@ export default function PlanReview({
               </div>
             </div>
 
-            {dayMeals.map(meal => {
-              const key = `${meal.date}-${meal.slot}`;
-              const rejected = rejectedMeals.has(key);
+            {slotOrder.map(slot => {
+              const slotMeals = slotMap.get(slot) || [];
+              if (slotMeals.length === 0) return null;
+
+              // Calculate slot subtotal
+              const slotCalories = slotMeals.reduce((sum, m) => rejectedMeals.has(mealKey(m)) ? sum : sum + m.calories, 0);
+              const slotProtein = slotMeals.reduce((sum, m) => rejectedMeals.has(mealKey(m)) ? sum : sum + m.protein, 0);
+
               return (
-                <div
-                  key={key}
-                  style={{
+                <div key={slot} style={{
+                  marginBottom: "10px",
+                  background: "#101512",
+                  border: "1px solid #242c26",
+                  borderRadius: "16px",
+                  overflow: "hidden",
+                }}>
+                  {/* Slot header */}
+                  <div style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "12px",
-                    padding: "12px",
-                    marginBottom: "8px",
-                    background: rejected ? "rgba(238,158,120,0.08)" : "#101512",
-                    border: `1px solid ${rejected ? "#ee9e7844" : "#242c26"}`,
-                    borderRadius: "16px",
-                    opacity: rejected ? 0.55 : 1,
-                    transition: "opacity .2s",
-                  }}
-                >
-                  <div style={{
-                    width: "40px",
-                    height: "40px",
-                    borderRadius: "12px",
-                    display: "grid",
-                    placeItems: "center",
-                    background: rejected ? "#3a2a22" : "#193423",
-                    color: rejected ? "#ee9e78" : "#a9f47a",
-                    fontSize: "18px",
-                    flex: "0 0 40px",
+                    justifyContent: "space-between",
+                    padding: "10px 14px",
+                    borderBottom: "1px solid #1c2620",
                   }}>
-                    {rejected ? "✕" : "✓"}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", gap: "7px", alignItems: "center" }}>
-                      <span style={{ color: "#8e9a91", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".07em" }}>
-                        {slotLabels[meal.slot]}
-                      </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontSize: "14px" }}>{slotIcons[slot]}</span>
+                      <strong style={{ fontSize: "12px", textTransform: "uppercase", letterSpacing: ".07em", color: "#a9f47a" }}>
+                        {slotLabels[slot]}
+                      </strong>
                     </div>
-                    <h4 style={{ fontSize: "13px", margin: "4px 0 3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {meal.foodName}
-                    </h4>
-                    <p style={{ color: "#98a49b", fontSize: "10px", margin: 0 }}>
-                      {meal.grams}g · <b>{meal.calories} kcal</b> · P {meal.protein}g · C {meal.carbs}g · F {meal.fat}g
-                    </p>
+                    <span style={{ fontSize: "10px", color: "#8e9a91" }}>
+                      {slotCalories} kcal · {Math.round(slotProtein)}g protein · {slotMeals.length} {slotMeals.length === 1 ? "item" : "items"}
+                    </span>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <button
-                      onClick={() => toggleReject(key)}
-                      style={{
-                        border: `1px solid ${rejected ? "#ee9e78" : "#465149"}`,
-                        borderRadius: "10px",
-                        background: rejected ? "rgba(238,158,120,0.15)" : "transparent",
-                        color: rejected ? "#ee9e78" : "#8e9a91",
-                        padding: "5px 10px",
-                        fontSize: "9px",
-                        fontWeight: 600,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {rejected ? "Undo" : "Reject"}
-                    </button>
-                    {!rejected && (
-                      <button
-                        onClick={() => onRegenerateMeal(meal.date, meal.slot)}
+
+                  {/* Food items in this slot */}
+                  {slotMeals.map(meal => {
+                    const key = mealKey(meal);
+                    const rejected = rejectedMeals.has(key);
+                    return (
+                      <div
+                        key={key}
                         style={{
-                          border: "1px solid #465149",
-                          borderRadius: "10px",
-                          background: "transparent",
-                          color: "#8e9a91",
-                          padding: "5px 10px",
-                          fontSize: "9px",
-                          fontWeight: 600,
-                          whiteSpace: "nowrap",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          padding: "10px 14px",
+                          borderBottom: "1px solid #1c2620",
+                          opacity: rejected ? 0.45 : 1,
+                          transition: "opacity .2s",
                         }}
                       >
-                        Swap
-                      </button>
-                    )}
-                  </div>
+                        <div style={{
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "8px",
+                          display: "grid",
+                          placeItems: "center",
+                          background: rejected ? "#3a2a22" : "#193423",
+                          color: rejected ? "#ee9e78" : "#a9f47a",
+                          fontSize: "12px",
+                          flex: "0 0 28px",
+                        }}>
+                          {rejected ? "✕" : "✓"}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h4 style={{ fontSize: "12px", margin: "0 0 2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: rejected ? "line-through" : "none" }}>
+                            {meal.foodName}
+                          </h4>
+                          <p style={{ color: "#98a49b", fontSize: "9px", margin: 0 }}>
+                            {meal.grams}g · <b>{meal.calories} kcal</b> · P {meal.protein}g · C {meal.carbs}g · F {meal.fat}g
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => toggleReject(key)}
+                          style={{
+                            border: `1px solid ${rejected ? "#ee9e78" : "#465149"}`,
+                            borderRadius: "8px",
+                            background: rejected ? "rgba(238,158,120,0.15)" : "transparent",
+                            color: rejected ? "#ee9e78" : "#8e9a91",
+                            padding: "4px 8px",
+                            fontSize: "9px",
+                            fontWeight: 600,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {rejected ? "Undo" : "Remove"}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}

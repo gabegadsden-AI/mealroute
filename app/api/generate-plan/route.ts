@@ -38,7 +38,7 @@ const planSchema = {
           date: { type: "string", description: "YYYY-MM-DD format" },
           slot: { type: "string", enum: ["breakfast", "lunch", "dinner", "snack"] },
           foodName: { type: "string", description: "Must match a food from the user's palette exactly." },
-          grams: { type: "integer", minimum: 20, maximum: 800, description: "Portion size in grams." },
+          grams: { type: "integer", minimum: 10, maximum: 800, description: "Portion size in grams." },
           calories: { type: "integer" },
           protein: { type: "number" },
           carbs: { type: "number" },
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       dates.push(`${y}-${m}-${day}`);
     }
 
-    // Build the food palette for the AI prompt
+    // Build the food palette — group by preferred slot so AI knows which foods go where
     const palette = preferences.map((food: any) => ({
       name: food.food_name,
       per100g: {
@@ -112,6 +112,20 @@ export async function POST(request: Request) {
       },
       preferredSlots: Array.isArray(food.preferred_slots) ? food.preferred_slots : ["breakfast", "lunch", "dinner", "snack"],
     }));
+
+    // Build a slot → foods map for the prompt
+    const slotMap: Record<string, string[]> = {
+      breakfast: [],
+      lunch: [],
+      dinner: [],
+      snack: [],
+    };
+    for (const food of palette) {
+      const slots = food.preferredSlots?.length ? food.preferredSlots : ["breakfast", "lunch", "dinner", "snack"];
+      for (const slot of slots) {
+        if (slotMap[slot]) slotMap[slot].push(food.name);
+      }
+    }
 
     const calorieGoal = Math.round(Number(profile.calorie_goal) || 2000);
     const proteinGoal = Math.round(Number(profile.protein_goal_g) || 0);
@@ -129,56 +143,92 @@ USER TARGETS (per day):
 USER FOOD PALETTE (use ONLY these foods):
 ${JSON.stringify(palette, null, 2)}
 
+FOODS GROUPED BY MEAL SLOT:
+- Breakfast: ${slotMap.breakfast.join(", ") || "none assigned"}
+- Lunch: ${slotMap.lunch.join(", ") || "none assigned"}
+- Dinner: ${slotMap.dinner.join(", ") || "none assigned"}
+- Snack: ${slotMap.snack.join(", ") || "none assigned"}
+
 DATES TO PLAN: ${dates.join(", ")}
 
 RULES:
-1. Each day MUST have breakfast, lunch, dinner, and one snack (4 meals per day).
-2. Use ONLY foods from the palette. Do NOT invent foods or substitute.
-3. Vary the foods across days — avoid repeating the same meal more than 2 days in a row.
-4. Respect each food's preferredSlots (a food listed for breakfast should appear in breakfast, etc.).
-5. Size portions (in grams) so the daily total gets as close as possible to the calorie and macro targets.
-6. Typical portion ranges: breakfast 200-500g, lunch 250-600g, dinner 250-600g, snack 50-200g. Adjust as needed to hit targets.
-7. Calculate calories and macros for each meal based on the per-100g values and the gram amount. Use: calories = round(per100g.calories * grams / 100), etc.
-8. The daily total should be within ±15% of the calorie target. Protein should be within ±20% of the protein target.
-9. Return one meal object per slot per day. Every meal must have date, slot, foodName, grams, calories, protein, carbs, fat.
+1. Each day MUST have breakfast, lunch, dinner, and one snack.
+2. For each meal slot, include MULTIPLE foods from the palette that are assigned to that slot. For example, if Oats, Eggs, and Banana are all assigned to breakfast, include all three as separate meal entries for that day's breakfast.
+3. Each food item gets its own meal object with its own grams, calories, and macros.
+4. Use ONLY foods from the palette. Do NOT invent foods or substitute.
+5. Vary which foods appear each day, but always include the foods assigned to each slot.
+6. If a slot has more than 3 foods assigned, pick 2-3 per day and rotate across days.
+7. Size portions (in grams) so the daily total gets as close as possible to the calorie and macro targets.
+8. Typical portion ranges: breakfast items 30-150g each, lunch items 50-250g each, dinner items 50-250g each, snack items 20-100g each. Adjust as needed to hit targets.
+9. Calculate calories and macros for each meal based on the per-100g values and the gram amount. Use: calories = round(per100g.calories * grams / 100), etc.
+10. The daily total should be within ±15% of the calorie target. Protein should be within ±20% of the protein target.
+11. Return one meal object per food item per slot per day. Multiple foods in the same slot = multiple objects with the same date and slot.
 
-Return JSON matching the schema.`;
+Return JSON with this structure: { "meals": [ { "date": "YYYY-MM-DD", "slot": "breakfast", "foodName": "Oats", "grams": 80, "calories": 300, "protein": 10, "carbs": 55, "fat": 5 } ] }`;
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return Response.json({ error: "AI plan generation is not configured." }, { status: 503 });
+      console.error("[generate-plan] OPENAI_API_KEY is not set");
+      return Response.json({ error: "AI plan generation is not configured. Ask the admin to set the OpenAI API key." }, { status: 503 });
     }
 
-    const apiResponse = await fetch("https://api.openai.com/v1/responses", {
+    const model = process.env.OPENAI_MODEL || "gpt-4o";
+    console.log(`[generate-plan] Calling OpenAI model=${model}, days=${numDays}, palette=${palette.length} foods`);
+
+    const apiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5.6",
-        store: false,
-        max_output_tokens: 4000,
-        input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }],
-        text: { format: { type: "json_schema", name: "meal_plan", strict: true, schema: planSchema } },
+        model,
+        max_tokens: 6000,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: "You are a precise nutrition planner. Always respond with valid JSON matching the requested schema.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
       }),
     });
 
-    const responseBody = await apiResponse.json() as any;
     if (!apiResponse.ok) {
-      const message = responseBody?.error?.message || "The AI service could not generate a plan.";
+      const errorBody = await apiResponse.text();
+      console.error(`[generate-plan] OpenAI error ${apiResponse.status}: ${errorBody}`);
+      let message = "The AI service could not generate a plan.";
+      try {
+        const parsed = JSON.parse(errorBody);
+        if (parsed?.error?.message) message = parsed.error.message;
+      } catch {}
       return Response.json({ error: message }, { status: apiResponse.status });
     }
 
-    const outputText = responseBody.output
-      ?.flatMap((item: any) => item.content || [])
-      .find((item: any) => item.type === "output_text")?.text;
+    const responseBody = await apiResponse.json() as any;
+    const outputText = responseBody?.choices?.[0]?.message?.content;
 
     if (!outputText) {
+      console.error("[generate-plan] No content in OpenAI response", JSON.stringify(responseBody).slice(0, 500));
       return Response.json({ error: "No plan was generated. Please try again." }, { status: 502 });
     }
 
-    const plan = JSON.parse(outputText) as { meals: PlanMeal[] };
+    let plan: { meals: PlanMeal[] };
+    try {
+      plan = JSON.parse(outputText);
+    } catch {
+      console.error("[generate-plan] Failed to parse AI output as JSON");
+      return Response.json({ error: "The AI returned an invalid response. Please try again." }, { status: 502 });
+    }
+
+    if (!plan.meals || !Array.isArray(plan.meals) || plan.meals.length === 0) {
+      console.error("[generate-plan] No meals in parsed plan");
+      return Response.json({ error: "The generated plan was empty. Try adding more foods to your palette." }, { status: 502 });
+    }
 
     // Calculate daily totals
     const dailyTotalsMap = new Map<string, { calories: number; protein: number; carbs: number; fat: number }>();
@@ -201,8 +251,11 @@ Return JSON matching the schema.`;
 
     const result: GeneratedPlan = { meals: plan.meals, dailyTotals };
 
+    console.log(`[generate-plan] Success: ${plan.meals.length} meals across ${dailyTotals.length} days`);
+
     return Response.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
+    console.error("[generate-plan] Unhandled error:", error);
     const message = error instanceof Error ? error.message : "Plan generation failed.";
     return Response.json({ error: message }, { status: 500 });
   }
