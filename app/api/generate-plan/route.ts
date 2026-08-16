@@ -55,6 +55,42 @@ const SLOT_LABELS: Record<string, string> = {
 // Default calorie goal used when the user hasn't set one during onboarding.
 const DEFAULT_CALORIE_GOAL = 2000;
 
+// ─── Plan variation logic ─────────────────────────────────────────────
+// Instead of dumping every food into every day, we rotate through the
+// foods assigned to each slot so consecutive days look different.
+//
+//   1 food  → same every day (no choice)
+//   2 foods → alternate (A, B, A, B, ...)
+//   3 foods → 2 per day, rotating the pair (AB, BC, CA, AB, ...)
+//   4+ foods → 2 per day, rotating the pair (AB, CD, AC, BD, ...)
+//
+// The slot's total calorie budget stays the same regardless of which
+// foods are picked, so daily calorie totals stay consistent.
+
+type Food = {
+  name: string;
+  caloriesPer100g: number;
+  proteinPer100g: number;
+  carbsPer100g: number;
+  fatPer100g: number;
+};
+
+function pickFoodsForDay(slotFoods: Food[], dayIndex: number): Food[] {
+  if (slotFoods.length <= 1) return slotFoods;
+  if (slotFoods.length === 2) {
+    // Alternate: even days → [0], odd days → [1]
+    return [slotFoods[dayIndex % 2]];
+  }
+  // 3+ foods: pick 2 per day, rotating through the list
+  const pickCount = Math.min(2, slotFoods.length);
+  const start = (dayIndex * pickCount) % slotFoods.length;
+  const picked: Food[] = [];
+  for (let i = 0; i < pickCount; i++) {
+    picked.push(slotFoods[(start + i) % slotFoods.length]);
+  }
+  return picked;
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -108,13 +144,7 @@ export async function POST(request: Request) {
     }
 
     // Group foods by their assigned slots — respect the user's choices EXACTLY.
-    const foodsBySlot: Record<string, Array<{
-      name: string;
-      caloriesPer100g: number;
-      proteinPer100g: number;
-      carbsPer100g: number;
-      fatPer100g: number;
-    }>> = {
+    const foodsBySlot: Record<string, Food[]> = {
       breakfast: [],
       lunch: [],
       dinner: [],
@@ -124,7 +154,7 @@ export async function POST(request: Request) {
     let unassignedFoodNames: string[] = [];
 
     for (const food of preferences as any[]) {
-      const foodObj = {
+      const foodObj: Food = {
         name: String(food.food_name || ""),
         caloriesPer100g: Number(food.calories_per_100g) || 0,
         proteinPer100g: Number(food.protein_per_100g) || 0,
@@ -169,18 +199,23 @@ export async function POST(request: Request) {
     const usedDefault = !rawCalorieGoal && !rawSuggestedGoal;
     const calorieGoal = Math.round(rawCalorieGoal || rawSuggestedGoal || DEFAULT_CALORIE_GOAL);
 
-    // Build the plan — fully deterministic
+    // Build the plan with day-to-day rotation
     const allMeals: PlanMeal[] = [];
 
-    for (const date of dates) {
+    for (let dayIdx = 0; dayIdx < dates.length; dayIdx++) {
+      const date = dates[dayIdx];
+
       for (const slot of ["breakfast", "lunch", "dinner", "snack"]) {
         const slotFoods = foodsBySlot[slot];
         if (!slotFoods || slotFoods.length === 0) continue;
 
-        const slotCalories = Math.round(calorieGoal * SLOT_CALORIE_SHARE[slot]);
-        const caloriesPerFood = slotCalories / slotFoods.length;
+        // Pick which foods appear on this day (rotation)
+        const dayFoods = pickFoodsForDay(slotFoods, dayIdx);
 
-        for (const food of slotFoods) {
+        const slotCalories = Math.round(calorieGoal * SLOT_CALORIE_SHARE[slot]);
+        const caloriesPerFood = slotCalories / dayFoods.length;
+
+        for (const food of dayFoods) {
           let grams: number;
           if (food.caloriesPer100g > 0) {
             grams = Math.round((caloriesPerFood / food.caloriesPer100g) * 100);
@@ -247,7 +282,11 @@ export async function POST(request: Request) {
       (result as any).warnings = warnings;
     }
 
-    console.log(`[generate-plan] Success: ${allMeals.length} meals across ${dailyTotals.length} days, ${totalFoods} foods assigned, ${unassignedFoodNames.length} unassigned, calorieGoal=${calorieGoal}${usedDefault ? " (DEFAULT)" : ""}`);
+    // Log for debugging
+    const slotSummary = ["breakfast", "lunch", "dinner", "snack"]
+      .map(s => `${s}:${foodsBySlot[s].length}`)
+      .join(" ");
+    console.log(`[generate-plan] Success: ${allMeals.length} meals across ${dailyTotals.length} days, foods per slot [${slotSummary}], ${unassignedFoodNames.length} unassigned, calorieGoal=${calorieGoal}${usedDefault ? " (DEFAULT)" : ""}`);
 
     return Response.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
