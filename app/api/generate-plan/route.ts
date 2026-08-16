@@ -52,6 +52,9 @@ const SLOT_LABELS: Record<string, string> = {
   snack: "Snack",
 };
 
+// Default calorie goal used when the user hasn't set one during onboarding.
+const DEFAULT_CALORIE_GOAL = 2000;
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -70,7 +73,7 @@ export async function POST(request: Request) {
     // Load user profile
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("calorie_goal,protein_goal_g,carbs_goal_g,fat_goal_g,primary_goal")
+      .select("calorie_goal,protein_goal_g,carbs_goal_g,fat_goal_g,primary_goal,suggested_calorie_goal")
       .eq("user_id", userId)
       .single();
 
@@ -105,11 +108,6 @@ export async function POST(request: Request) {
     }
 
     // Group foods by their assigned slots — respect the user's choices EXACTLY.
-    // IMPORTANT: only fall back to "all slots" when preferred_slots is missing
-    // entirely (null/undefined — old rows from before slot assignment existed).
-    // A food with an explicit empty array [] means "not assigned yet" and must
-    // be excluded from every slot, not defaulted back to all four. That
-    // defaulting was the root cause of foods appearing in the wrong meals.
     const foodsBySlot: Record<string, Array<{
       name: string;
       caloriesPer100g: number;
@@ -137,10 +135,8 @@ export async function POST(request: Request) {
       const rawSlots = food.preferred_slots;
       let slots: string[];
       if (rawSlots === null || rawSlots === undefined) {
-        // Legacy row with no slots field at all — default to all four.
         slots = ["breakfast", "lunch", "dinner", "snack"];
       } else if (Array.isArray(rawSlots)) {
-        // Respect exactly what was saved, including an empty array.
         slots = rawSlots;
       } else {
         slots = [];
@@ -158,7 +154,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Check that at least one slot has foods
     const totalFoods = Object.values(foodsBySlot).reduce((sum, arr) => sum + arr.length, 0);
     if (totalFoods === 0) {
       return Response.json({
@@ -168,12 +163,13 @@ export async function POST(request: Request) {
 
     const emptySlots = ["breakfast", "lunch", "dinner", "snack"].filter(s => foodsBySlot[s].length === 0);
 
-    const calorieGoal = Math.round(Number(profile.calorie_goal) || 2000);
+    // Use the user's calorie goal, or fall back to suggested, or default
+    const rawCalorieGoal = Number(profile.calorie_goal);
+    const rawSuggestedGoal = Number(profile.suggested_calorie_goal);
+    const usedDefault = !rawCalorieGoal && !rawSuggestedGoal;
+    const calorieGoal = Math.round(rawCalorieGoal || rawSuggestedGoal || DEFAULT_CALORIE_GOAL);
 
-    // Build the plan — fully deterministic, no AI involved.
-    // For each day, for each slot, include ALL foods assigned to that slot —
-    // exactly as the user configured them. The AI is not asked to decide
-    // meal placement anymore, so it can't get it wrong.
+    // Build the plan — fully deterministic
     const allMeals: PlanMeal[] = [];
 
     for (const date of dates) {
@@ -181,10 +177,7 @@ export async function POST(request: Request) {
         const slotFoods = foodsBySlot[slot];
         if (!slotFoods || slotFoods.length === 0) continue;
 
-        // This slot gets SLOT_CALORIE_SHARE of the daily calorie target
         const slotCalories = Math.round(calorieGoal * SLOT_CALORIE_SHARE[slot]);
-
-        // Split the slot's calories evenly across all foods assigned to it
         const caloriesPerFood = slotCalories / slotFoods.length;
 
         for (const food of slotFoods) {
@@ -241,6 +234,9 @@ export async function POST(request: Request) {
     const result: GeneratedPlan & { warnings?: string[] } = { meals: allMeals, dailyTotals };
 
     const warnings: string[] = [];
+    if (usedDefault) {
+      warnings.push(`No calorie goal set in your profile — using a default of ${DEFAULT_CALORIE_GOAL} kcal/day. Go to Profile → Goals to set your personal target for accurate portions.`);
+    }
     if (emptySlots.length > 0) {
       warnings.push(`No foods assigned to: ${emptySlots.map(s => SLOT_LABELS[s]).join(", ")}. Those meal slots will be empty in the plan.`);
     }
@@ -251,7 +247,7 @@ export async function POST(request: Request) {
       (result as any).warnings = warnings;
     }
 
-    console.log(`[generate-plan] Success: ${allMeals.length} meals across ${dailyTotals.length} days, ${totalFoods} foods assigned, ${unassignedFoodNames.length} unassigned`);
+    console.log(`[generate-plan] Success: ${allMeals.length} meals across ${dailyTotals.length} days, ${totalFoods} foods assigned, ${unassignedFoodNames.length} unassigned, calorieGoal=${calorieGoal}${usedDefault ? " (DEFAULT)" : ""}`);
 
     return Response.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
