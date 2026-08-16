@@ -62,6 +62,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
+  // Auto-expand newly added foods so the user immediately sees the meal picker
   const [expandedFoodId, setExpandedFoodId] = useState<string | null>(null);
   const [savingSlots, setSavingSlots] = useState(false);
 
@@ -103,7 +104,12 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
         fatPer100g: result.fatPer100g,
         fibrePer100g: result.fibrePer100g,
         category: groceryCategory(result.name),
-        preferredSlots: allSlots, // default to all slots, user assigns after
+        // FIX: default to NO slots assigned. Previously this defaulted to
+        // allSlots, which meant every meal button appeared "already selected"
+        // (green) the moment a food was added. Tapping a slot then REMOVED it
+        // instead of adding it — the opposite of what the user expected.
+        // Starting empty means tapping "Breakfast" clearly turns it ON.
+        preferredSlots: [],
       });
       setSearchResults(prev => prev.filter(r => r.fdcId !== result.fdcId));
     } catch (err) {
@@ -120,7 +126,6 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
     const updated = current.includes(slot)
       ? current.filter(s => s !== slot)
       : [...current, slot];
-    // Optimistic update is handled by parent via onUpdateSlots
     setSavingSlots(true);
     try {
       await onUpdateSlots(foodId, updated);
@@ -132,13 +137,16 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
   };
 
   const hasEnoughFoods = palette.length >= 3;
+  // A food only "counts" as ready for plan generation once it has at least
+  // one meal slot explicitly assigned.
+  const unassignedCount = palette.filter(f => f.preferredSlots.length === 0).length;
 
   return (
     <div style={{ padding: "0 0 20px" }}>
       <div style={{ marginBottom: "20px" }}>
         <h2 style={{ fontSize: "20px", letterSpacing: "-.03em", margin: "0 0 4px" }}>My Foods</h2>
         <p style={{ color: "#8e9a91", fontSize: "11px", margin: 0 }}>
-          Add foods you enjoy, then assign them to meals. We&apos;ll use these to build your meal plans.
+          Add foods you enjoy, then tap which meals each one belongs to. We&apos;ll use exactly those assignments to build your plan.
         </p>
       </div>
 
@@ -260,13 +268,14 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
 
         {palette.map(food => {
           const isExpanded = expandedFoodId === food.id;
+          const isUnassigned = food.preferredSlots.length === 0;
           return (
             <div
               key={food.id}
               style={{
                 marginBottom: "8px",
                 background: "var(--panel)",
-                border: `1px solid ${isExpanded ? "var(--green)" : "#242d27"}`,
+                border: `1px solid ${isExpanded ? "var(--green)" : isUnassigned ? "#ee9e78" : "#242d27"}`,
                 borderRadius: "16px",
                 overflow: "hidden",
                 transition: "border-color .2s",
@@ -285,10 +294,12 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h4 style={{ fontSize: "12px", margin: "0 0 3px" }}>{food.foodName}</h4>
-                  <p style={{ color: "#98a49b", fontSize: "9px", margin: 0 }}>
+                  <p style={{ color: isUnassigned ? "#ee9e78" : "#98a49b", fontSize: "9px", margin: 0 }}>
                     {food.caloriesPer100g} kcal / 100g
                     {" · "}
-                    {food.preferredSlots.length === allSlots.length
+                    {food.preferredSlots.length === 0
+                      ? "Tap to assign meals"
+                      : food.preferredSlots.length === allSlots.length
                       ? "All meals"
                       : food.preferredSlots.map(s => slotLabels[s]).join(", ")}
                   </p>
@@ -379,6 +390,11 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                       );
                     })}
                   </div>
+                  {isUnassigned && (
+                    <p style={{ color: "#ee9e78", fontSize: "9px", margin: "8px 0 0" }}>
+                      Not assigned to any meal yet — tap Breakfast, Lunch, Dinner, or Snack above. This food won&apos;t appear in your plan until you assign it.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -391,21 +407,23 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
             marginTop: "16px",
             padding: "14px",
             borderRadius: "16px",
-            background: hasEnoughFoods
+            background: hasEnoughFoods && unassignedCount === 0
               ? "linear-gradient(130deg,#1a241d,#101612)"
               : "#101512",
-            border: `1px solid ${hasEnoughFoods ? "#2d392f" : "#242c26"}`,
+            border: `1px solid ${hasEnoughFoods && unassignedCount === 0 ? "#2d392f" : "#242c26"}`,
             textAlign: "center",
           }}>
             <p style={{
               margin: 0,
               fontSize: "12px",
-              color: hasEnoughFoods ? "var(--green)" : "#8e9a91",
+              color: hasEnoughFoods && unassignedCount === 0 ? "var(--green)" : "#8e9a91",
               fontWeight: 600,
             }}>
-              {hasEnoughFoods
-                ? "✓ Ready! Go to Weekly Plan to generate your AI meal plan."
-                : `Add ${3 - palette.length} more food${3 - palette.length === 1 ? "" : "s"} to unlock AI plan generation.`}
+              {!hasEnoughFoods
+                ? `Add ${3 - palette.length} more food${3 - palette.length === 1 ? "" : "s"} to unlock AI plan generation.`
+                : unassignedCount > 0
+                ? `${unassignedCount} food${unassignedCount === 1 ? "" : "s"} still need${unassignedCount === 1 ? "s" : ""} a meal assignment — tap them above.`
+                : "✓ Ready! Go to Weekly Plan to generate your meal plan."}
             </p>
           </div>
         )}
