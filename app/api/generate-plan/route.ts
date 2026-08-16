@@ -45,6 +45,13 @@ const SLOT_MAX_GRAMS: Record<string, number> = {
   snack: 200,
 };
 
+const SLOT_LABELS: Record<string, string> = {
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
+  snack: "Snack",
+};
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -97,7 +104,12 @@ export async function POST(request: Request) {
       dates.push(`${y}-${m}-${day}`);
     }
 
-    // Group foods by their assigned slots — respect user's choices exactly
+    // Group foods by their assigned slots — respect the user's choices EXACTLY.
+    // IMPORTANT: only fall back to "all slots" when preferred_slots is missing
+    // entirely (null/undefined — old rows from before slot assignment existed).
+    // A food with an explicit empty array [] means "not assigned yet" and must
+    // be excluded from every slot, not defaulted back to all four. That
+    // defaulting was the root cause of foods appearing in the wrong meals.
     const foodsBySlot: Record<string, Array<{
       name: string;
       caloriesPer100g: number;
@@ -111,6 +123,8 @@ export async function POST(request: Request) {
       snack: [],
     };
 
+    let unassignedFoodNames: string[] = [];
+
     for (const food of preferences as any[]) {
       const foodObj = {
         name: String(food.food_name || ""),
@@ -119,9 +133,23 @@ export async function POST(request: Request) {
         carbsPer100g: Number(food.carbs_per_100g) || 0,
         fatPer100g: Number(food.fat_per_100g) || 0,
       };
-      const slots: string[] = Array.isArray(food.preferred_slots) && food.preferred_slots.length > 0
-        ? food.preferred_slots
-        : ["breakfast", "lunch", "dinner", "snack"];
+
+      const rawSlots = food.preferred_slots;
+      let slots: string[];
+      if (rawSlots === null || rawSlots === undefined) {
+        // Legacy row with no slots field at all — default to all four.
+        slots = ["breakfast", "lunch", "dinner", "snack"];
+      } else if (Array.isArray(rawSlots)) {
+        // Respect exactly what was saved, including an empty array.
+        slots = rawSlots;
+      } else {
+        slots = [];
+      }
+
+      if (slots.length === 0) {
+        unassignedFoodNames.push(foodObj.name);
+        continue;
+      }
 
       for (const slot of slots) {
         if (foodsBySlot[slot]) {
@@ -134,15 +162,18 @@ export async function POST(request: Request) {
     const totalFoods = Object.values(foodsBySlot).reduce((sum, arr) => sum + arr.length, 0);
     if (totalFoods === 0) {
       return Response.json({
-        error: "No foods are assigned to any meal slots. Assign foods to Breakfast, Lunch, Dinner, or Snack first."
+        error: "No foods are assigned to any meal slots yet. Go to My Foods and tap Breakfast, Lunch, Dinner, or Snack for each food."
       }, { status: 400 });
     }
 
+    const emptySlots = ["breakfast", "lunch", "dinner", "snack"].filter(s => foodsBySlot[s].length === 0);
+
     const calorieGoal = Math.round(Number(profile.calorie_goal) || 2000);
 
-    // Build the plan — deterministic, NO AI needed
-    // For each day, for each slot, include ALL foods assigned to that slot
-    // Portion sizes calculated to hit the slot's calorie share
+    // Build the plan — fully deterministic, no AI involved.
+    // For each day, for each slot, include ALL foods assigned to that slot —
+    // exactly as the user configured them. The AI is not asked to decide
+    // meal placement anymore, so it can't get it wrong.
     const allMeals: PlanMeal[] = [];
 
     for (const date of dates) {
@@ -153,12 +184,10 @@ export async function POST(request: Request) {
         // This slot gets SLOT_CALORIE_SHARE of the daily calorie target
         const slotCalories = Math.round(calorieGoal * SLOT_CALORIE_SHARE[slot]);
 
-        // Split the slot's calories across all foods in this slot
-        // Each food gets an equal share of the slot's calorie budget
+        // Split the slot's calories evenly across all foods assigned to it
         const caloriesPerFood = slotCalories / slotFoods.length;
 
         for (const food of slotFoods) {
-          // Calculate grams: grams = (caloriesPerFood / caloriesPer100g) * 100
           let grams: number;
           if (food.caloriesPer100g > 0) {
             grams = Math.round((caloriesPerFood / food.caloriesPer100g) * 100);
@@ -166,15 +195,11 @@ export async function POST(request: Request) {
             grams = SLOT_MIN_GRAMS[slot] || 50;
           }
 
-          // Clamp to reasonable ranges
           const minG = SLOT_MIN_GRAMS[slot] || 30;
           const maxG = SLOT_MAX_GRAMS[slot] || 300;
           grams = Math.max(minG, Math.min(maxG, grams));
-
-          // Round to nearest 5g
           grams = Math.round(grams / 5) * 5;
 
-          // Calculate actual calories and macros from grams
           const calories = Math.round((food.caloriesPer100g * grams) / 100);
           const protein = round1((food.proteinPer100g * grams) / 100);
           const carbs = round1((food.carbsPer100g * grams) / 100);
@@ -213,9 +238,20 @@ export async function POST(request: Request) {
       fat: round1(totals.fat),
     }));
 
-    const result: GeneratedPlan = { meals: allMeals, dailyTotals };
+    const result: GeneratedPlan & { warnings?: string[] } = { meals: allMeals, dailyTotals };
 
-    console.log(`[generate-plan] Success: ${allMeals.length} meals across ${dailyTotals.length} days, ${totalFoods} foods in palette`);
+    const warnings: string[] = [];
+    if (emptySlots.length > 0) {
+      warnings.push(`No foods assigned to: ${emptySlots.map(s => SLOT_LABELS[s]).join(", ")}. Those meal slots will be empty in the plan.`);
+    }
+    if (unassignedFoodNames.length > 0) {
+      warnings.push(`${unassignedFoodNames.length} food(s) in your palette have no meal assigned and were skipped: ${unassignedFoodNames.join(", ")}.`);
+    }
+    if (warnings.length > 0) {
+      (result as any).warnings = warnings;
+    }
+
+    console.log(`[generate-plan] Success: ${allMeals.length} meals across ${dailyTotals.length} days, ${totalFoods} foods assigned, ${unassignedFoodNames.length} unassigned`);
 
     return Response.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
