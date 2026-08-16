@@ -1,4 +1,5 @@
 "use client";
+import LegalFooter from "./components/LegalFooter";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -2694,3 +2695,4 @@ function Modal({ type, close, addWater, setWaterTotal, saveWaterGoal, water, wat
     {type === "manual" && <ManualFoodEditor startMode={manualStartMode} initialFood={manualInitialFood} recentFoods={recentFoods} savedProducts={savedProducts} onAdd={onAddManualFood} />}
   </section></div>;
 }
+<LegalFooter />
