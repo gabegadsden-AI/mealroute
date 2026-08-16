@@ -1,4 +1,6 @@
 "use client";
+import ProfileCompletionBanner from "./components/ProfileCompletionBanner";
+
 import LegalFooter from "./components/LegalFooter";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1327,6 +1329,12 @@ export default function Home() {
           {!dataReady
             ? <div className="history-empty"><strong>Loading your NutriPath account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
             : <>
+              <ProfileCompletionBanner
+                hasCalorieGoal={!!(profile?.calorie_goal && Number(profile.calorie_goal) > 0)}
+                hasMacroGoals={profile?.protein_goal_g !== null && profile?.carbs_goal_g !== null && profile?.fat_goal_g !== null}
+                onOpenGoals={() => setModal("goals")}
+              />
+
               {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
               {tab === "plan" && (
                 <>
