@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./manual-food.css";
+@import "./barcode.css";
 
 :root { --bg:#090d0b; --panel:#111714; --panel-2:#171e1a; --line:#273029; --text:#f4f7f4; --muted:#8e9a91; --green:#a9f47a; --green-dark:#193423; --orange:#f0a467; }
 * { box-sizing:border-box; }
