@@ -295,3 +295,152 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+/* ─── Barcode Scanner ─────────────────────────────────── */
+
+.barcode-camera-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #0a0e0c;
+  border: 1px solid #2a3530;
+  margin: 12px 0;
+}
+
+.barcode-camera-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.barcode-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.barcode-reticle {
+  width: 70%;
+  height: 44%;
+  border: 2px solid var(--green);
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  animation: barcode-pulse 2s ease-in-out infinite;
+}
+
+@keyframes barcode-pulse {
+  0%, 100% { border-color: var(--green); }
+  50% { border-color: rgba(204, 255, 0, 0.4); }
+}
+
+.barcode-scanning-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--green);
+  font-size: 10px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.barcode-product-image {
+  width: 100%;
+  max-width: 200px;
+  aspect-ratio: 1;
+  background-size: cover;
+  background-position: center;
+  border-radius: 12px;
+  margin: 8px auto 12px;
+  border: 1px solid #2a3530;
+}
+
+.barcode-label-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.barcode-energy-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.barcode-energy-row .segment button {
+  padding: 11px 14px;
+  font-size: 10px;
+  border: 1px solid #354139;
+  background: #101512;
+  color: var(--text);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.barcode-energy-row .segment button.active {
+  border-color: var(--green);
+  background: var(--green);
+  color: #112015;
+}
+
+.barcode-macro-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.barcode-macro-grid label,
+.barcode-energy-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.barcode-macro-grid label span,
+.barcode-energy-row label span {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.barcode-macro-grid input,
+.barcode-energy-row input {
+  border: 1px solid #354139;
+  background: #101512;
+  color: var(--text);
+  border-radius: 11px;
+  padding: 11px;
+  font-size: 10px;
+  outline: none;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.barcode-macro-grid input:focus,
+.barcode-energy-row input:focus,
+.barcode-label-fields input:focus {
+  border-color: var(--green);
+}
+
+.barcode-label-fields .manual-custom-name input {
+  border: 1px solid #354139;
+  background: #101512;
+  color: var(--text);
+  border-radius: 11px;
+  padding: 11px;
+  font-size: 10px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
