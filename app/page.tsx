@@ -649,9 +649,10 @@ export default function Home() {
     }
   }
 
-  async function handleAcceptPlan() {
+  async function handleAcceptPlan(acceptedMeals?: PlanMeal[]) {
     if (!generatedPlan) return;
-    const newPlanned: Meal[] = generatedPlan.meals.map((meal: PlanMeal) => ({
+    const mealsToSave = acceptedMeals || generatedPlan.meals;
+    const newPlanned: Meal[] = mealsToSave.map((meal: PlanMeal) => ({
       id: Date.now() + Math.random() * 100000,
       type: "Planned meal",
       name: meal.foodName,
@@ -1410,7 +1411,8 @@ export default function Home() {
                       proteinGoal={macroTargets.protein}
                       carbsGoal={macroTargets.carbs}
                       fatGoal={macroTargets.fat}
-                      onAccept={handleAcceptPlan}
+                      foodPalette={foodPalette}
+                      onAccept={(meals) => handleAcceptPlan(meals)}
                       onReject={handleRejectPlan}
                       onRegenerateMeal={handleRegenerateMeal}
                     />
@@ -1439,6 +1441,7 @@ export default function Home() {
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
       {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} />}
+      <LegalFooter />
     </main>
   );
 }
@@ -2703,4 +2706,3 @@ function Modal({ type, close, addWater, setWaterTotal, saveWaterGoal, water, wat
     {type === "manual" && <ManualFoodEditor startMode={manualStartMode} initialFood={manualInitialFood} recentFoods={recentFoods} savedProducts={savedProducts} onAdd={onAddManualFood} />}
   </section></div>;
 }
-<LegalFooter />
