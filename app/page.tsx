@@ -2,6 +2,7 @@
 import ProfileCompletionBanner from "./components/ProfileCompletionBanner";
 
 import LegalFooter from "./components/LegalFooter";
+import BarcodeScanner from "./components/BarcodeScanner";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -392,7 +393,7 @@ export default function Home() {
   const [legacyImport, setLegacyImport] = useState<LegacyImportData | null>(null);
   const [importingLegacy, setImportingLegacy] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
-  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros" | "weight" | "manual">(null);
+  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros" | "weight" | "manual" | "barcode">(null);
   const [manualStartMode, setManualStartMode] = useState<"search" | "saved" | "custom">("search");
   const [manualInitialFood, setManualInitialFood] = useState<ManualFoodItem | null>(null);
   const [toast, setToast] = useState("");
@@ -1419,7 +1420,7 @@ export default function Home() {
                   )}
                 </>
               )}
-              {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} onManual={openManualFood} />}
+              {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} onManual={openManualFood} onBarcode={() => setModal("barcode")} />}
               {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} weekLabel={groceryWeekLabel} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
               {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />}
             </>}
@@ -1914,17 +1915,20 @@ function Log({
   notify,
   recentFoods,
   onManual,
+  onBarcode,
 }: {
   onPhoto: (file?: File) => void;
   notify: (s: string) => void;
   recentFoods: ManualFoodItem[];
   onManual: (mode: "search" | "saved" | "custom", food?: ManualFoodItem | null) => void;
+  onBarcode: () => void;
 }) {
+
   return <>
     <section className="log-hero"><div className="camera-orb">◎<i>✦</i></div><h2>What did you eat?</h2><p>Snap a photo and NutriPath will estimate the meal—then ask when details could make it more accurate.</p><div className="photo-actions"><PhotoPicker label="Take a photo" capture="environment" onPhoto={onPhoto} /><PhotoPicker label="Upload from library" onPhoto={onPhoto} secondary /></div><span>Nutrition values are always estimates.</span></section>
     <section className="method-grid">
       <button onClick={() => onManual("search")}><i>⌕</i><div><strong>Search food</strong><span>Find USDA foods and calculate an exact gram amount</span></div><b>›</b></button>
-      <button onClick={() => notify("Barcode scanning is planned for a later development step")}><i>▣</i><div><strong>Scan a barcode</strong><span>Coming after manual food search is verified</span></div><b>›</b></button>
+     <button onClick={onBarcode}><i>▣</i><div><strong>Scan a barcode</strong><span>Look up packaged foods by barcode</span></div><b>›</b></button>
       <button onClick={() => onManual("custom")}><i>✎</i><div><strong>Enter manually</strong><span>Enter a food name, grams, calories and macros</span></div><b>›</b></button>
     </section>
     <section className="section-block"><div className="section-heading"><div><p className="eyebrow">QUICK ADD</p><h2>Recent foods</h2></div>{recentFoods.length > 0 && <button onClick={() => onManual("saved")}>View all</button>}</div>
@@ -2704,5 +2708,7 @@ function Modal({ type, close, addWater, setWaterTotal, saveWaterGoal, water, wat
     {type === "goals" && profile && <GoalsEditor profile={profile} onBack={() => next("profile")} onSave={onSaveProfileGoals} />}
     {type === "macros" && profile && <MacroTargetsEditor profile={profile} calorieGoal={target} currentTargets={macroTargets} onBack={() => next("profile")} onSave={onSaveProfileMacros} />}
     {type === "manual" && <ManualFoodEditor startMode={manualStartMode} initialFood={manualInitialFood} recentFoods={recentFoods} savedProducts={savedProducts} onAdd={onAddManualFood} />}
+    {type === "barcode" && <BarcodeScanner savedProducts={savedProducts} onSaveProduct={(product) => { const next = [...(savedProducts as SavedPackagedProduct[]), product]; onSaveProducts(next.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 50)); }} onAdd={onAddManualFood} />}
+
   </section></div>;
 }
