@@ -81,7 +81,7 @@ function pickFoodsForDay(slotFoods: Food[]): Food[] {
   return slotFoods;
 }
 
-}
+
 
 export async function POST(request: Request) {
   try {
