@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   calculateManualNutrition,
   type ManualFoodItem,
-} from "../lib/manual-food";
+} from "../../lib/manual-food";
+
 
 
 // ─── Types ──────────────────────────────────────────────
