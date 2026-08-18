@@ -10,6 +10,9 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
+
     "heic-to": "1.5.2",
     "next": "^16.2.11",
     "react": "19.2.6",
