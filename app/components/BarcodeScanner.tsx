@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   calculateManualNutrition,
-  packagedProductFood,
   type ManualFoodItem,
 } from "../lib/manual-food";
+
 
 // ─── Types ──────────────────────────────────────────────
 
