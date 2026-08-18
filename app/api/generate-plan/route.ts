@@ -75,20 +75,12 @@ type Food = {
   fatPer100g: number;
 };
 
-function pickFoodsForDay(slotFoods: Food[], dayIndex: number): Food[] {
-  if (slotFoods.length <= 1) return slotFoods;
-  if (slotFoods.length === 2) {
-    // Alternate: even days → [0], odd days → [1]
-    return [slotFoods[dayIndex % 2]];
-  }
-  // 3+ foods: pick 2 per day, rotating through the list
-  const pickCount = Math.min(2, slotFoods.length);
-  const start = (dayIndex * pickCount) % slotFoods.length;
-  const picked: Food[] = [];
-  for (let i = 0; i < pickCount; i++) {
-    picked.push(slotFoods[(start + i) % slotFoods.length]);
-  }
-  return picked;
+function pickFoodsForDay(slotFoods: Food[]): Food[] {
+  // Return ALL foods assigned to this slot on every day.
+  // The slot's calorie budget is split evenly across all foods.
+  return slotFoods;
+}
+
 }
 
 export async function POST(request: Request) {
@@ -210,7 +202,8 @@ export async function POST(request: Request) {
         if (!slotFoods || slotFoods.length === 0) continue;
 
         // Pick which foods appear on this day (rotation)
-        const dayFoods = pickFoodsForDay(slotFoods, dayIdx);
+       const dayFoods = pickFoodsForDay(slotFoods);
+
 
         const slotCalories = Math.round(calorieGoal * SLOT_CALORIE_SHARE[slot]);
         const caloriesPerFood = slotCalories / dayFoods.length;
