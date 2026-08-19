@@ -705,3 +705,20 @@
   color: var(--muted, #8b938b);
   line-height: 1.4;
 }
+
+/* Plan picker animation + active button */
+.plan-picker-open {
+  animation: planPickerSlide 0.25s ease-out;
+  border-color: var(--green, #4CAF50);
+}
+
+@keyframes planPickerSlide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.btn-secondary.active {
+  background: rgba(76, 175, 80, 0.12);
+  border-color: var(--green, #4CAF50);
+  color: var(--green, #4CAF50);
+}

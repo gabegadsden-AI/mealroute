@@ -53,6 +53,7 @@ const round1 = (v: number) => Math.round((v + Number.EPSILON) * 10) / 10;
 // ─── Component ───────────────────────────────────────────
 
 export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: Props) {
+  const [showPlanPicker, setShowPlanPicker] = useState(false);
   const [planDate, setPlanDate] = useState(() => { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0"); return `${y}-${m}-${day}`; });
   const [planSlot, setPlanSlot] = useState<MealSlot>("breakfast");
   const [stage, setStage] = useState<"scan" | "result">("scan");
@@ -429,21 +430,26 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
         {adding ? "Adding…" : "Add to today"}
       </button>
       <button
-        className="btn-secondary"
-        disabled={!food || !validGrams || adding}
-        onClick={() => void addFood("plan", planDate || undefined, planSlot)}
+        className={`btn-secondary ${showPlanPicker ? "active" : ""}`}
+        disabled={!food || !validGrams || adding || showPlanPicker}
+        onClick={() => setShowPlanPicker(true)}
       >
-        Add to plan
+        {showPlanPicker ? "Pick date & meal ↓" : "Add to plan"}
       </button>
     </div>
 
-    <div className="plan-picker">
-      <div className="plan-picker-row">
-        <label><span>Date</span><input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} /></label>
-        <label><span>Meal</span><select value={planSlot} onChange={e => setPlanSlot(e.target.value as MealSlot)}>{mealSlots.map(s => <option key={s} value={s}>{mealSlotLabels[s]}</option>)}</select></label>
+    {showPlanPicker && (
+      <div className="plan-picker plan-picker-open">
+        <div className="plan-picker-row">
+          <label><span>Date</span><input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} /></label>
+          <label><span>Meal</span><select value={planSlot} onChange={e => setPlanSlot(e.target.value as MealSlot)}>{mealSlots.map(s => <option key={s} value={s}>{mealSlotLabels[s]}</option>)}</select></label>
+        </div>
+        <div className="plan-picker-actions">
+          <button className="btn-primary" disabled={!food || !validGrams || adding || !planDate} onClick={() => void addFood("plan", planDate, planSlot)}>{adding ? "Adding…" : "Schedule in plan"}</button>
+          <button className="plan-picker-cancel" onClick={() => setShowPlanPicker(false)}>Cancel</button>
+        </div>
       </div>
-      <small className="plan-picker-hint">Pick a date and meal slot, then tap Add to plan. Leave the date blank to add as unscheduled.</small>
-    </div>
+    )}
 
     {addError && <p className="lookup-error">{addError}</p>}
 
