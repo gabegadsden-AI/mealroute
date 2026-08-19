@@ -5,8 +5,8 @@ import {
   calculateManualNutrition,
   type ManualFoodItem,
 } from "../../lib/manual-food";
-
-
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -45,21 +45,6 @@ type Props = {
 
 const round1 = (v: number) => Math.round((v + Number.EPSILON) * 10) / 10;
 
-// ─── BarcodeDetector polyfill type ───────────────────────
-
-type BarcodeDetectorClass = {
-  new (options?: { formats?: string[] }): {
-    detect: (source: CanvasImageSource) => Promise<Array<{ rawValue: string }>>;
-  };
-  getSupportedFormats(): Promise<string[]>;
-};
-
-declare global {
-  interface Window {
-    BarcodeDetector?: BarcodeDetectorClass;
-  }
-}
-
 // ─── Component ───────────────────────────────────────────
 
 export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: Props) {
@@ -68,11 +53,10 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
   const [manualEntry, setManualEntry] = useState(false);
   const [looking, setLooking] = useState(false);
   const [lookupError, setLookupError] = useState("");
+  const [cameraError, setCameraError] = useState("");
 
-  // Product data from lookup
   const [product, setProduct] = useState<LookupResult | null>(null);
 
-  // Editable label fields (per 100g)
   const [labelName, setLabelName] = useState("");
   const [labelEnergy, setLabelEnergy] = useState("");
   const [labelUnit, setLabelUnit] = useState<"kcal" | "kJ">("kcal");
@@ -81,72 +65,72 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
   const [labelFat, setLabelFat] = useState("");
   const [labelFibre, setLabelFibre] = useState("");
 
-  // Grams + calculation
   const [grams, setGrams] = useState("100");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
 
-  // Camera
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const detectorRef = useRef<InstanceType<BarcodeDetectorClass> | null>(null);
-  const scanningRef = useRef(true);
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const controlsRef = useRef<{ stop: () => void } | null>(null);
 
-  // ─── Camera scanner ────────────────────────────────────
+  // ─── Camera scanner (ZXing) ────────────────────────────
 
   useEffect(() => {
-    if (!manualEntry || stage !== "scan") return;
+    if (manualEntry || stage !== "scan") return;
 
     let cancelled = false;
 
     async function startCamera() {
-      if (!("BarcodeDetector" in window) || !navigator.mediaDevices) {
-        return; // Falls back to manual entry
-      }
-
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-        });
-        if (cancelled) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.CODE_128,
+        ]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+
+        const reader = new BrowserMultiFormatReader(hints);
+        readerRef.current = reader;
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        let deviceId: string | undefined;
+        const videoDevices = devices.filter(d => d.kind === "videoinput");
+        if (videoDevices.length > 1) {
+          const backCam = videoDevices.find(d =>
+            /back|rear|environment/i.test(d.label)
+          );
+          if (backCam) deviceId = backCam.deviceId;
         }
-        streamRef.current = stream;
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+        const controls = await reader.decodeFromVideoDevice(
+          deviceId,
+          videoRef.current!,
+          (result, err) => {
+            if (cancelled) return;
+            if (result) {
+              const code = result.getText();
+              if (code && code.length >= 6) {
+                if (controlsRef.current) {
+                  controlsRef.current.stop();
+                }
+                handleBarcode(code);
+              }
+            }
+          }
+        );
+        controlsRef.current = controls;
+
+        if (cancelled && controls) {
+          controls.stop();
         }
-
-        const formats = await window.BarcodeDetector!.getSupportedFormats();
-        detectorRef.current = new window.BarcodeDetector!({
-          formats: formats.includes("ean_13") ? ["ean_13", "ean_8", "upc_a", "upc_e"] : formats,
-        });
-
-        scanningRef.current = true;
-        scanLoop();
-      } catch {
-        // Camera not available — stays in manual entry mode
-      }
-    }
-
-    async function scanLoop() {
-      if (!detectorRef.current || !videoRef.current || cancelled) return;
-
-      try {
-        const barcodes = await detectorRef.current.detect(videoRef.current);
-        if (barcodes.length > 0 && barcodes[0].rawValue) {
-          scanningRef.current = false;
-          handleBarcode(barcodes[0].rawValue);
-          return;
+      } catch (err) {
+        if (!cancelled) {
+          setCameraError("Camera not available. Enter the barcode manually.");
+          setManualEntry(true);
         }
-      } catch {
-        // Detection error — try again next frame
-      }
-
-      if (scanningRef.current && !cancelled) {
-        requestAnimationFrame(scanLoop);
       }
     }
 
@@ -154,10 +138,9 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
 
     return () => {
       cancelled = true;
-      scanningRef.current = false;
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
+      if (controlsRef.current) {
+        try { controlsRef.current.stop(); } catch {}
+        controlsRef.current = null;
       }
     };
   }, [manualEntry, stage]);
@@ -201,7 +184,6 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
         setGrams("100");
         setStage("result");
       } else {
-        // Not found — let user enter label manually
         setLabelName("");
         setLabelEnergy("");
         setLabelUnit("kcal");
@@ -254,7 +236,6 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
   const validGrams = Number.isFinite(gramsNum) && gramsNum >= 1 && gramsNum <= 5000;
   const preview = food && validGrams ? calculateManualNutrition(food, gramsNum) : null;
 
-  // Check if product is already saved
   const alreadySaved = food
     ? savedProducts.some(p => p.id === food.sourceKey.replace("label:", ""))
     : false;
@@ -266,7 +247,6 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
     setAdding(true);
     setAddError("");
 
-    // Save verified product for reuse
     const productId = food.sourceKey.replace("label:", "");
     onSaveProduct({
       id: productId,
@@ -288,6 +268,10 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
   }
 
   function reset() {
+    if (controlsRef.current) {
+      try { controlsRef.current.stop(); } catch {}
+      controlsRef.current = null;
+    }
     setStage("scan");
     setBarcode("");
     setProduct(null);
@@ -300,20 +284,21 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
     setGrams("100");
     setLookupError("");
     setAddError("");
+    setCameraError("");
     setManualEntry(false);
   }
 
   // ─── Render ─────────────────────────────────────────────
 
   if (stage === "scan") {
-    const hasCamera = "BarcodeDetector" in window && typeof navigator !== "undefined" && !!navigator.mediaDevices;
+    const cameraSupported = typeof navigator !== "undefined" && !!navigator.mediaDevices;
 
     return <div className="manual-food-editor">
       <p className="eyebrow">BARCODE SCAN</p>
       <h2>Scan a packaged food</h2>
       <p className="modal-sub">Point your camera at a product barcode. NutriPath will look up the nutrition label and let you verify the values before logging.</p>
 
-      {hasCamera && !manualEntry && (
+      {cameraSupported && !manualEntry && (
         <div className="barcode-camera-frame">
           <video ref={videoRef} playsInline muted autoPlay />
           <div className="barcode-overlay">
@@ -323,114 +308,130 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
         </div>
       )}
 
-      {(!hasCamera || manualEntry) && (
+      {cameraSupported && !manualEntry && (
+        <button
+          className="manual-toggle"
+          onClick={() => {
+            if (controlsRef.current) { try { controlsRef.current.stop(); } catch {} }
+            setManualEntry(true);
+          }}
+        >
+          Enter barcode manually
+        </button>
+      )}
+
+      {(!cameraSupported || manualEntry) && (
         <form className="manual-search" onSubmit={submitManualBarcode}>
           <input
             type="text"
             inputMode="numeric"
             value={barcode}
-            onChange={e => setBarcode(e.target.value)}
+            onChange={e => { setBarcode(e.target.value); setLookupError(""); }}
             placeholder="Enter barcode number"
             maxLength={14}
             autoFocus
           />
-          <button type="submit" disabled={looking}>
-            {looking ? "Looking…" : "Look up"}
-          </button>
+          <button type="submit" className="lookup-btn">Look up</button>
         </form>
       )}
 
-      {hasCamera && !manualEntry && (
-        <button className="text-button" onClick={() => setManualEntry(true)}>
-          Enter barcode manually
-        </button>
-      )}
-
-      {lookupError && <div className="auth-error">{lookupError}</div>}
+      {lookupError && <p className="lookup-error">{lookupError}</p>}
+      {cameraError && <p className="lookup-error">{cameraError}</p>}
     </div>;
   }
 
   // ─── Result / Edit stage ────────────────────────────────
 
   return <div className="manual-food-editor">
-    <button className="goals-back" type="button" onClick={reset}>‹ Scan another</button>
-    <p className="eyebrow">BARCODE RESULT</p>
-    <h2>{labelName || "Unknown product"}</h2>
-    {product?.brandName && <p className="manual-brand">{product.brandName}</p>}
-
+    <p className="eyebrow">{product?.found ? "PRODUCT FOUND" : "MANUAL ENTRY"}</p>
+    <h2>{labelName || "Enter nutrition label"}</h2>
+    {product?.found && <p className="modal-sub">Verify the values below against the package, then enter your gram amount.</p>}
+    {!product?.found && <p className="modal-sub">No product found for barcode {barcode}. Enter the values from the nutrition label.</p>}
     {product?.imageUrl && (
-      <div className="barcode-product-image" style={{ backgroundImage: `url(${product.imageUrl})` }} />
+      <div style={{ textAlign: "center", margin: "12px 0" }}>
+        <img src={product.imageUrl} alt={product.productName} style={{ maxHeight: 100, borderRadius: 8 }} />
+      </div>
     )}
 
-    {lookupError && <div className="connection-notice"><b>Heads up</b><span>{lookupError}</span></div>}
-
-    <div className="manual-source">
-      <strong>{product?.found ? "Open Food Facts lookup" : "Manual label entry"}</strong>
-      <span>Per 100g · Edit any incorrect values from the package</span>
-    </div>
-
-    <div className="barcode-label-fields">
-      <label className="manual-custom-name">
+    <div className="manual-fields">
+      <label>
         <span>Product name</span>
-        <input value={labelName} onChange={e => setLabelName(e.target.value)} maxLength={160} placeholder="Product name" />
+        <input value={labelName} onChange={e => setLabelName(e.target.value)} placeholder="e.g. Nutella" />
       </label>
-
-      <div className="barcode-energy-row">
+      <div className="macro-row">
         <label>
-          <span>Energy per 100g</span>
-          <input type="number" inputMode="decimal" min="0" step="0.1" value={labelEnergy} onChange={e => setLabelEnergy(e.target.value)} placeholder="0" />
+          <span>Energy (per 100g)</span>
+          <input type="number" inputMode="decimal" value={labelEnergy} onChange={e => setLabelEnergy(e.target.value)} placeholder="e.g. 539" />
         </label>
-        <div className="segment">
-          <button type="button" className={labelUnit === "kcal" ? "active" : ""} onClick={() => setLabelUnit("kcal")}>kcal</button>
-          <button type="button" className={labelUnit === "kJ" ? "active" : ""} onClick={() => setLabelUnit("kJ")}>kJ</button>
-        </div>
+        <label className="unit-pick">
+          <span>Unit</span>
+          <select value={labelUnit} onChange={e => setLabelUnit(e.target.value as "kcal" | "kJ")}>
+            <option value="kcal">kcal</option>
+            <option value="kJ">kJ</option>
+          </select>
+        </label>
       </div>
-
-      <div className="barcode-macro-grid">
-        <label><span>Carbs (g)</span><input type="number" inputMode="decimal" min="0" step="0.1" value={labelCarbs} onChange={e => setLabelCarbs(e.target.value)} placeholder="0" /></label>
-        <label><span>Protein (g)</span><input type="number" inputMode="decimal" min="0" step="0.1" value={labelProtein} onChange={e => setLabelProtein(e.target.value)} placeholder="0" /></label>
-        <label><span>Fat (g)</span><input type="number" inputMode="decimal" min="0" step="0.1" value={labelFat} onChange={e => setLabelFat(e.target.value)} placeholder="0" /></label>
-        <label><span>Fibre (g)</span><input type="number" inputMode="decimal" min="0" step="0.1" value={labelFibre} onChange={e => setLabelFibre(e.target.value)} placeholder="0" /></label>
+      <div className="macro-row">
+        <label>
+          <span>Carbs (g)</span>
+          <input type="number" inputMode="decimal" value={labelCarbs} onChange={e => setLabelCarbs(e.target.value)} placeholder="0" />
+        </label>
+        <label>
+          <span>Protein (g)</span>
+          <input type="number" inputMode="decimal" value={labelProtein} onChange={e => setLabelProtein(e.target.value)} placeholder="0" />
+        </label>
+      </div>
+      <div className="macro-row">
+        <label>
+          <span>Fat (g)</span>
+          <input type="number" inputMode="decimal" value={labelFat} onChange={e => setLabelFat(e.target.value)} placeholder="0" />
+        </label>
+        <label>
+          <span>Fibre (g)</span>
+          <input type="number" inputMode="decimal" value={labelFibre} onChange={e => setLabelFibre(e.target.value)} placeholder="0" />
+        </label>
       </div>
     </div>
 
-    <label className="manual-grams">
-      <span>Amount eaten</span>
-      <input type="number" inputMode="decimal" min="1" max="5000" step="0.1" value={grams} onChange={e => setGrams(e.target.value)} />
-      <small>g</small>
-    </label>
-
-    {preview ? (
-      <div className="manual-preview">
-        <div className="manual-calories">
-          <span>Calculated total</span>
-          <strong>{preview.calories}<small> kcal</small></strong>
+    <div className="manual-grams">
+      <label>
+        <span>How many grams?</span>
+        <input type="number" inputMode="decimal" value={grams} onChange={e => setGrams(e.target.value)} />
+      </label>
+      {preview && (
+        <div className="preview-box">
+          <strong>{preview.name}</strong>
+          <div className="preview-macros">
+            <span>{Math.round(preview.calories)} kcal</span>
+            <span>P {round1(preview.protein)}g</span>
+            <span>C {round1(preview.carbs)}g</span>
+            <span>F {round1(preview.fat)}g</span>
+          </div>
         </div>
-        <div><span>Carbs</span><strong>{preview.carbs}g</strong></div>
-        <div><span>Protein</span><strong>{preview.protein}g</strong></div>
-        <div><span>Fat</span><strong>{preview.fat}g</strong></div>
-        <div><span>Fibre</span><strong>{preview.fibre}g</strong></div>
-      </div>
-    ) : (
-      <div className="auth-error">Enter energy per 100g and a gram amount to calculate nutrition.</div>
-    )}
+      )}
+    </div>
 
-    {alreadySaved && <p className="goals-safety">✓ This product is already saved for reuse.</p>}
+    {alreadySaved && <p className="saved-note">✓ Saved to your verified products</p>}
 
-    {addError && <div className="auth-error">{addError}</div>}
-
-    <div className="manual-add-actions">
-      <button type="button" disabled={!preview || adding} onClick={() => addFood("today")}>
-        {adding ? "Saving…" : "Save & Add to Today"}
+    <div className="manual-actions">
+      <button
+        className="btn-primary"
+        disabled={!food || !validGrams || adding}
+        onClick={() => addFood("today")}
+      >
+        {adding ? "Adding…" : "Add to today"}
       </button>
-      <button type="button" disabled={!preview || adding} onClick={() => addFood("plan")}>
-        Save & Add to Plan
+      <button
+        className="btn-secondary"
+        disabled={!food || !validGrams || adding}
+        onClick={() => addFood("plan")}
+      >
+        Add to plan
       </button>
     </div>
 
-    <p className="goals-safety">
-      Values are calculated from the per-100g label data and your exact gram amount.
-      Verified products are saved to your account for quick reuse next time.
-    </p>
+    {addError && <p className="lookup-error">{addError}</p>}
+
+    <button className="scan-again" onClick={reset}>← Scan another barcode</button>
   </div>;
 }
