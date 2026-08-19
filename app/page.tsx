@@ -1337,7 +1337,7 @@ export default function Home() {
                 onOpenGoals={() => setModal("goals")}
               />
 
-              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} />}
+              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} onBarcode={() => setModal("barcode")} />}
               {tab === "plan" && (
                 <>
                   <div className="plan-sub-nav" style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
@@ -1420,7 +1420,7 @@ export default function Home() {
                   )}
                 </>
               )}
-              {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} onManual={openManualFood} onBarcode={() => setModal("barcode")} />}
+              {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} savedProducts={savedProducts} onManual={openManualFood} onBarcode={() => setModal("barcode")} />}
               {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} weekLabel={groceryWeekLabel} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
               {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />}
             </>}
@@ -1733,7 +1733,7 @@ function MacroTargetsEditor({
   </div>;
 }
 
-function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog }: any) {
+function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onBarcode }: any) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const dates = today ? Array.from({ length: 7 }, (_, index) => {
@@ -1765,7 +1765,7 @@ function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fa
         <MacroGoal kind="protein" label="Protein" value={protein} goal={macroTargets.protein} />
         <MacroGoal kind="fat" label="Fat" value={fat} goal={macroTargets.fat} />
       </div>
-      <div className="overview-actions"><button className="scan-meal" onClick={onLog}><span>＋</span><b>Scan or log meal</b></button><button onClick={onWater} aria-label={`Water: ${water} of ${waterGoal} millilitres`}><span>♢</span><b>{(water / 1000).toFixed(1)} / {(waterGoal / 1000).toFixed(1)}L</b></button></div>
+      <div className="overview-actions"><button className="scan-meal" onClick={onLog}><span>＋</span><b>Scan or log meal</b></button><button className="scan-barcode" onClick={onBarcode}><span>▣</span><b>Scan barcode</b></button><button onClick={onWater} aria-label={`Water: ${water} of ${waterGoal} millilitres`}><span>♢</span><b>{(water / 1000).toFixed(1)} / {(waterGoal / 1000).toFixed(1)}L</b></button></div>
     </section>
 
     <section className="section-block">
@@ -1914,12 +1914,14 @@ function Log({
   onPhoto,
   notify,
   recentFoods,
+  savedProducts,
   onManual,
   onBarcode,
 }: {
   onPhoto: (file?: File) => void;
   notify: (s: string) => void;
   recentFoods: ManualFoodItem[];
+  savedProducts: SavedPackagedProduct[];
   onManual: (mode: "search" | "saved" | "custom", food?: ManualFoodItem | null) => void;
   onBarcode: () => void;
 }) {
@@ -1936,6 +1938,7 @@ function Log({
         ? <div className="recent-row">{recentFoods.slice(0, 4).map((food, index) => <button key={food.sourceKey} onClick={() => onManual("saved", food)}><span className={`mini-food ${index % 2 ? "berry" : "wrap"}`} />{food.name}<small>{Math.round(food.caloriesPer100g)} kcal per 100g</small></button>)}</div>
         : <div className="history-empty"><strong>No recent foods yet.</strong><span>Search or manually enter a food. After you log it, NutriPath will keep it here for faster reuse.</span><button onClick={() => onManual("search")}>Search food</button></div>}
     </section>
+    {savedProducts.length > 0 && <section className="section-block"><div className="section-heading"><div><p className="eyebrow">VERIFIED PRODUCTS</p><h2>Scanned & saved</h2></div></div><div className="recent-row">{savedProducts.slice(0, 6).map((product) => { const food = packagedProductFood(product); return <button key={product.id} onClick={() => onManual("saved", food)}><span className="mini-food wrap" />{product.productName}<small>{Math.round(food.caloriesPer100g)} kcal per 100g</small></button>; })}</div></section>}
   </>;
 }
 
