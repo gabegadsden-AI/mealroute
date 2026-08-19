@@ -730,3 +730,15 @@
   color: var(--green, #4CAF50) !important;
   opacity: 1 !important;
 }
+
+/* Highlight for newly scheduled meal */
+.weekly-plan-meal.just-added {
+  animation: mealFlash 1.2s ease-out 3;
+  border-color: var(--green, #4CAF50) !important;
+}
+
+@keyframes mealFlash {
+  0% { box-shadow: 0 0 0 0 rgba(169, 244, 122, 0); }
+  30% { box-shadow: 0 0 0 3px rgba(169, 244, 122, 0.4); border-color: var(--green, #4CAF50); }
+  100% { box-shadow: 0 0 0 0 rgba(169, 244, 122, 0); }
+}

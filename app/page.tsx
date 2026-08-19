@@ -407,6 +407,7 @@ export default function Home() {
   const [analysisError, setAnalysisError] = useState("");
   const [foodPalette, setFoodPalette] = useState<FoodPreference[]>([]);
   const [planSubView, setPlanSubView] = useState<PlanSubView>("week");
+  const [focusPlanDate, setFocusPlanDate] = useState("");
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlan | null>(null);
   const [planError, setPlanError] = useState("");
@@ -1252,7 +1253,15 @@ export default function Home() {
       const nextPlan = [...plannedMeals, nextMeal];
       setPlannedMeals(nextPlan);
       mealSaved = await saveMealState(mealHistory, nextPlan, `${food.name} added to My Plan with ${nutrition.grams}g`);
-      if (mealSaved) await refreshGroceryForPlan(nextPlan);
+      if (mealSaved) {
+        await refreshGroceryForPlan(nextPlan);
+        // Auto-navigate to the scheduled date in the plan view
+        if (plannedDate) {
+          setPlanSubView("week");
+          setPlanWeekStart(weekStartKey(plannedDate));
+          setFocusPlanDate(plannedDate);
+        }
+      }
     }
 
     if (mealSaved) {
@@ -1390,7 +1399,7 @@ export default function Home() {
                         </div>
                         {planError && <p style={{ color: "#ee9e78", fontSize: "11px", margin: "12px 0 0" }}>{planError}</p>}
                       </div>
-                      <Plan meals={plannedMeals} weekStart={planWeekStart || weekStartKey()} onWeekChange={setPlanWeekStart} onSchedule={updatePlannedMealSchedule} onRemove={removePlannedMeal} onLog={logPlannedMeal} onReviewGrocery={openWeeklyGrocery} />
+                      <Plan meals={plannedMeals} weekStart={planWeekStart || weekStartKey()} onWeekChange={setPlanWeekStart} onSchedule={updatePlannedMealSchedule} onRemove={removePlannedMeal} onLog={logPlannedMeal} onReviewGrocery={openWeeklyGrocery} focusDate={focusPlanDate} />
                     </>
                   )}
                   {planSubView === "palette" && (
@@ -1798,12 +1807,13 @@ function MealCard({ meal, onMeal }: { meal: Meal; onMeal: (id: number) => void }
   </article>;
 }
 
-function PlannedMealCard({ meal, defaultDate, onSchedule, onRemove, onLog }: {
+function PlannedMealCard({ meal, defaultDate, onSchedule, onRemove, onLog, highlight }: {
   meal: Meal;
   defaultDate: string;
   onSchedule: (id: number, plannedDate: string | null, mealSlot?: MealSlot) => Promise<string>;
   onRemove: (id: number) => Promise<void>;
   onLog: (id: number) => Promise<void>;
+  highlight?: boolean;
 }) {
   const [editing, setEditing] = useState(!meal.plannedDate || !meal.mealSlot);
   const [date, setDate] = useState(meal.plannedDate || defaultDate);
@@ -1836,7 +1846,7 @@ function PlannedMealCard({ meal, defaultDate, onSchedule, onRemove, onLog }: {
     setSaving(false);
   }
 
-  return <article className="weekly-plan-meal">
+  return <article className={`weekly-plan-meal${highlight ? " just-added" : ""}`}>
     <div className="weekly-plan-meal-head"><div className={`meal-image ${meal.color}`}><span>{meal.mealSlot ? mealSlotLabels[meal.mealSlot].slice(0, 1) : "●"}</span></div><div><span>{meal.mealSlot ? mealSlotLabels[meal.mealSlot] : "Unscheduled"}</span><h3>{meal.name}</h3><p>{meal.calories} kcal · {meal.protein}g protein</p></div></div>
     {editing && <div className="plan-schedule-editor">
       <label><span>Date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
@@ -1853,7 +1863,7 @@ function PlannedMealCard({ meal, defaultDate, onSchedule, onRemove, onLog }: {
   </article>;
 }
 
-function Plan({ meals, weekStart, onWeekChange, onSchedule, onRemove, onLog, onReviewGrocery }: {
+function Plan({ meals, weekStart, onWeekChange, onSchedule, onRemove, onLog, onReviewGrocery, focusDate }: {
   meals: Meal[];
   weekStart: string;
   onWeekChange: (weekStart: string) => void;
@@ -1861,6 +1871,7 @@ function Plan({ meals, weekStart, onWeekChange, onSchedule, onRemove, onLog, onR
   onRemove: (id: number) => Promise<void>;
   onLog: (id: number) => Promise<void>;
   onReviewGrocery: (weekStart: string) => Promise<void>;
+  focusDate?: string;
 }) {
   const activeWeekStart = isDateKey(weekStart) ? weekStart : weekStartKey();
   const dates = weekDateKeys(activeWeekStart);
@@ -1871,6 +1882,16 @@ function Plan({ meals, weekStart, onWeekChange, onSchedule, onRemove, onLog, onR
     const nextDates = weekDateKeys(activeWeekStart);
     setSelectedPlanDate(nextDates.includes(today) ? today : nextDates[0]);
   }, [activeWeekStart, today]);
+
+  // Jump to the focus date when parent signals a newly scheduled meal
+  useEffect(() => {
+    if (focusDate && isDateKey(focusDate)) {
+      const dates = weekDateKeys(activeWeekStart);
+      if (dates.includes(focusDate)) {
+        setSelectedPlanDate(focusDate);
+      }
+    }
+  }, [focusDate, activeWeekStart]);
 
   const weekMeals = mealsForWeek(meals, activeWeekStart);
   const unscheduled = meals.filter(meal => !isDateKey(meal.plannedDate) || !normalizeMealSlot(meal.mealSlot));
@@ -1899,7 +1920,7 @@ function Plan({ meals, weekStart, onWeekChange, onSchedule, onRemove, onLog, onR
     <section className="weekly-day-plan"><div className="section-heading"><div><p className="eyebrow">SELECTED DAY</p><h2>{dateFromKey(selectedPlanDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}</h2></div><span>{selectedMeals.reduce((sum, meal) => sum + meal.calories, 0).toLocaleString()} kcal</span></div>
       {mealSlots.map(slot => {
         const slotMeals = selectedMeals.filter(meal => meal.mealSlot === slot);
-        return <div className="meal-slot" key={slot}><div className="meal-slot-heading"><strong>{mealSlotLabels[slot]}</strong><span>{slotMeals.length ? `${slotMeals.length} ${slotMeals.length === 1 ? "meal" : "meals"}` : "Empty"}</span></div>{slotMeals.length ? slotMeals.map(meal => <PlannedMealCard key={meal.id} meal={meal} defaultDate={selectedPlanDate} onSchedule={onSchedule} onRemove={onRemove} onLog={onLog} />) : <p>No {mealSlotLabels[slot].toLowerCase()} planned.</p>}</div>;
+        return <div className="meal-slot" key={slot}><div className="meal-slot-heading"><strong>{mealSlotLabels[slot]}</strong><span>{slotMeals.length ? `${slotMeals.length} ${slotMeals.length === 1 ? "meal" : "meals"}` : "Empty"}</span></div>{slotMeals.length ? slotMeals.map(meal => <PlannedMealCard key={meal.id} meal={meal} defaultDate={selectedPlanDate} onSchedule={onSchedule} onRemove={onRemove} onLog={onLog} highlight={focusDate && meal.plannedDate === focusDate} />) : <p>No {mealSlotLabels[slot].toLowerCase()} planned.</p>}</div>;
       })}
     </section>
 
