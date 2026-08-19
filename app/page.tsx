@@ -1213,6 +1213,8 @@ export default function Home() {
     food: ManualFoodItem,
     grams: number,
     destination: "today" | "plan",
+    plannedDate?: string,
+    mealSlot?: MealSlot,
   ) {
     if (!userId) {
       notify("Your account is still loading. Please try again.");
@@ -1232,6 +1234,8 @@ export default function Home() {
       eaten: destination === "today",
       color: "wrap",
       ingredients: [{ name: food.name, amountGrams: nutrition.grams }],
+      plannedDate: destination === "plan" ? plannedDate : undefined,
+      mealSlot: destination === "plan" ? mealSlot : undefined,
     };
 
     let mealSaved: boolean;
@@ -1242,6 +1246,9 @@ export default function Home() {
       setSelectedDate(today);
       mealSaved = await saveMealState(nextHistory, plannedMeals, `${food.name} logged with ${nutrition.grams}g`);
     } else {
+      if (plannedDate && mealSlot) {
+        nextMeal.type = mealSlotLabels[mealSlot];
+      }
       const nextPlan = [...plannedMeals, nextMeal];
       setPlannedMeals(nextPlan);
       mealSaved = await saveMealState(mealHistory, nextPlan, `${food.name} added to My Plan with ${nutrition.grams}g`);

@@ -5,6 +5,11 @@ import {
   calculateManualNutrition,
   type ManualFoodItem,
 } from "../../lib/manual-food";
+import {
+  mealSlots,
+  mealSlotLabels,
+  type MealSlot,
+} from "../../lib/weekly-plan";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 
@@ -40,7 +45,7 @@ type LookupResult = {
 type Props = {
   savedProducts: SavedPackagedProduct[];
   onSaveProduct: (product: SavedPackagedProduct) => void;
-  onAdd: (food: ManualFoodItem, grams: number, destination: "today" | "plan") => Promise<boolean>;
+  onAdd: (food: ManualFoodItem, grams: number, destination: "today" | "plan", plannedDate?: string, mealSlot?: MealSlot) => Promise<boolean>;
 };
 
 const round1 = (v: number) => Math.round((v + Number.EPSILON) * 10) / 10;
@@ -48,6 +53,9 @@ const round1 = (v: number) => Math.round((v + Number.EPSILON) * 10) / 10;
 // ─── Component ───────────────────────────────────────────
 
 export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: Props) {
+  const [showPlanPicker, setShowPlanPicker] = useState(false);
+  const [planDate, setPlanDate] = useState("");
+  const [planSlot, setPlanSlot] = useState<MealSlot>("breakfast");
   const [stage, setStage] = useState<"scan" | "result">("scan");
   const [barcode, setBarcode] = useState("");
   const [manualEntry, setManualEntry] = useState(false);
@@ -242,7 +250,7 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
 
   // ─── Save + Add ────────────────────────────────────────
 
-  async function addFood(destination: "today" | "plan") {
+  async function addFood(destination: "today" | "plan", plannedDate?: string, mealSlot?: MealSlot) {
     if (!food || !preview || adding) return;
     setAdding(true);
     setAddError("");
@@ -260,7 +268,7 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
       updatedAt: Date.now(),
     });
 
-    const saved = await onAdd(food, preview.grams, destination);
+    const saved = await onAdd(food, preview.grams, destination, plannedDate, mealSlot);
     if (!saved) {
       setAddError("Could not add this food. Please try again.");
     }
@@ -424,11 +432,24 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
       <button
         className="btn-secondary"
         disabled={!food || !validGrams || adding}
-        onClick={() => addFood("plan")}
+        onClick={() => { if (!showPlanPicker) { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0"); setPlanDate(`${y}-${m}-${day}`); setPlanSlot("breakfast"); setShowPlanPicker(true); } }}
       >
         Add to plan
       </button>
     </div>
+
+    {showPlanPicker && (
+      <div className="plan-picker">
+        <div className="plan-picker-row">
+          <label><span>Date</span><input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} /></label>
+          <label><span>Meal</span><select value={planSlot} onChange={e => setPlanSlot(e.target.value as MealSlot)}>{mealSlots.map(s => <option key={s} value={s}>{mealSlotLabels[s]}</option>)}</select></label>
+        </div>
+        <div className="plan-picker-actions">
+          <button className="btn-primary" disabled={!food || !validGrams || adding || !planDate} onClick={() => void addFood("plan", planDate, planSlot)}>{adding ? "Adding…" : "Schedule in plan"}</button>
+          <button className="plan-picker-cancel" onClick={() => setShowPlanPicker(false)}>Cancel</button>
+        </div>
+      </div>
+    )}
 
     {addError && <p className="lookup-error">{addError}</p>}
 
