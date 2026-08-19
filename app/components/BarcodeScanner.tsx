@@ -400,7 +400,7 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
       </label>
       {preview && (
         <div className="preview-box">
-          <strong>{preview.name}</strong>
+          <strong>{labelName || "Product"}</strong>
           <div className="preview-macros">
             <span>{Math.round(preview.calories)} kcal</span>
             <span>P {round1(preview.protein)}g</span>
