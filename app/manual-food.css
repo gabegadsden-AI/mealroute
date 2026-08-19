@@ -722,3 +722,11 @@
   border-color: var(--green, #4CAF50);
   color: var(--green, #4CAF50);
 }
+
+.btn-secondary.active,
+.btn-secondary.active:disabled {
+  background: rgba(76, 175, 80, 0.12) !important;
+  border-color: var(--green, #4CAF50) !important;
+  color: var(--green, #4CAF50) !important;
+  opacity: 1 !important;
+}

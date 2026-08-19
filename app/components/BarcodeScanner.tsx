@@ -431,7 +431,7 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
       </button>
       <button
         className={`btn-secondary ${showPlanPicker ? "active" : ""}`}
-        disabled={!food || !validGrams || adding || showPlanPicker}
+        disabled={!food || !validGrams || adding}
         onClick={() => setShowPlanPicker(true)}
       >
         {showPlanPicker ? "Pick date & meal ↓" : "Add to plan"}
