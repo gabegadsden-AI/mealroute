@@ -1920,7 +1920,7 @@ function Plan({ meals, weekStart, onWeekChange, onSchedule, onRemove, onLog, onR
     <section className="weekly-day-plan"><div className="section-heading"><div><p className="eyebrow">SELECTED DAY</p><h2>{dateFromKey(selectedPlanDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}</h2></div><span>{selectedMeals.reduce((sum, meal) => sum + meal.calories, 0).toLocaleString()} kcal</span></div>
       {mealSlots.map(slot => {
         const slotMeals = selectedMeals.filter(meal => meal.mealSlot === slot);
-        return <div className="meal-slot" key={slot}><div className="meal-slot-heading"><strong>{mealSlotLabels[slot]}</strong><span>{slotMeals.length ? `${slotMeals.length} ${slotMeals.length === 1 ? "meal" : "meals"}` : "Empty"}</span></div>{slotMeals.length ? slotMeals.map(meal => <PlannedMealCard key={meal.id} meal={meal} defaultDate={selectedPlanDate} onSchedule={onSchedule} onRemove={onRemove} onLog={onLog} highlight={focusDate && meal.plannedDate === focusDate} />) : <p>No {mealSlotLabels[slot].toLowerCase()} planned.</p>}</div>;
+        return <div className="meal-slot" key={slot}><div className="meal-slot-heading"><strong>{mealSlotLabels[slot]}</strong><span>{slotMeals.length ? `${slotMeals.length} ${slotMeals.length === 1 ? "meal" : "meals"}` : "Empty"}</span></div>{slotMeals.length ? slotMeals.map(meal => <PlannedMealCard key={meal.id} meal={meal} defaultDate={selectedPlanDate} onSchedule={onSchedule} onRemove={onRemove} onLog={onLog} highlight={!!focusDate && meal.plannedDate === focusDate} />) : <p>No {mealSlotLabels[slot].toLowerCase()} planned.</p>}</div>;
       })}
     </section>
 
