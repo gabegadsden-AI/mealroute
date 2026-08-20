@@ -1,4 +1,5 @@
 import { calculateVerifiedIngredients } from "./nutrition-calculator";
+import { createClient } from "../../../lib/supabase/server";
 
 type AnalyzeRequest = {
   image?: string;
@@ -56,6 +57,11 @@ const schema = {
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      return Response.json({ error: "Sign in to analyze meals." }, { status: 401 });
+    }
     const body = (await request.json()) as AnalyzeRequest;
     const submittedReviewIngredients = Array.isArray(body.review?.ingredients) ? body.review.ingredients : [];
     const isReview = body.mode === "review" || submittedReviewIngredients.length > 0;
