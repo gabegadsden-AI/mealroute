@@ -279,7 +279,6 @@ export async function POST(request: Request) {
     const slotSummary = ["breakfast", "lunch", "dinner", "snack"]
       .map(s => `${s}:${foodsBySlot[s].length}`)
       .join(" ");
-    console.log(`[generate-plan] Success: ${allMeals.length} meals across ${dailyTotals.length} days, foods per slot [${slotSummary}], ${unassignedFoodNames.length} unassigned, calorieGoal=${calorieGoal}${usedDefault ? " (DEFAULT)" : ""}`);
 
     return Response.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
