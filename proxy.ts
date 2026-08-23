@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * Without this, users get silently logged out when their
  * initial session token expires (typically within hours).
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -40,7 +40,7 @@ export async function middleware(request: NextRequest) {
 }
 
 /**
- * Run middleware on all routes except static assets and API routes.
+ * Run proxy on all routes except static assets and API routes.
  * API routes handle their own auth via lib/supabase/server.ts.
  */
 export const config = {
