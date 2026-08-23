@@ -34,7 +34,17 @@ export default function SignupPage() {
       },
     });
     if (signUpError) {
-      setError(signUpError.message);
+      // Provide a clean English error message instead of relying on Supabase's locale
+      const msg = signUpError.message.toLowerCase();
+      if (msg.includes("already registered") || msg.includes("already been registered")) {
+        setError("This email is already registered. Try logging in instead.");
+      } else if (msg.includes("rate limit") || msg.includes("rate_limit")) {
+        setError("Too many attempts. Please wait a moment and try again.");
+      } else if (msg.includes("password") && msg.includes("weak")) {
+        setError("Please choose a stronger password (at least 8 characters).");
+      } else {
+        setError(signUpError.message);
+      }
       setLoading(false);
       return;
     }

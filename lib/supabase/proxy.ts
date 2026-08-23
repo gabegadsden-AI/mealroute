@@ -30,8 +30,8 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const { data } = await supabase.auth.getClaims();
-  const userId = data?.claims?.sub;
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
   const pathname = request.nextUrl.pathname;
   const isPublic = publicPaths.some(path => pathname.startsWith(path));
   const isPasswordUpdate = pathname.startsWith("/auth/update-password");
