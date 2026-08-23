@@ -3,16 +3,21 @@ import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * Refreshes the Supabase auth session on every request.
- * Without this, users get silently logged out when their
- * initial session token expires (typically within hours).
+ * Wrapped in try-catch so auth failures never crash the app.
  */
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
+  // If env vars are missing, skip session refresh and continue.
+  if (!supabaseUrl || !supabaseKey) {
+    return NextResponse.next({ request });
+  }
+
+  try {
+    let supabaseResponse = NextResponse.next({ request });
+
+    const supabase = createServerClient(supabaseUrl, supabaseKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll().map(({ name, value }) => ({ name, value }));
@@ -29,20 +34,16 @@ export async function proxy(request: NextRequest) {
           "Accept-Language": "en",
         },
       },
-    },
-  );
+    });
 
-  // Calling getUser() refreshes the session token if it's near expiry.
-  // The refreshed cookies are written to supabaseResponse automatically.
-  await supabase.auth.getUser();
-
-  return supabaseResponse;
+    await supabase.auth.getUser();
+    return supabaseResponse;
+  } catch {
+    // If anything goes wrong with session refresh, continue without it.
+    return NextResponse.next({ request });
+  }
 }
 
-/**
- * Run proxy on all routes except static assets and API routes.
- * API routes handle their own auth via lib/supabase/server.ts.
- */
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|robots\\.txt|sitemap\\.xml|manifest\\.json|android-chrome|apple-touch|mstile|favicon|browserconfig|site\\.webmanifest)).*)",
