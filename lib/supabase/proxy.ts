@@ -27,6 +27,11 @@ export async function updateSession(request: NextRequest) {
           });
         },
       },
+      global: {
+        headers: {
+          "Accept-Language": "en",
+        },
+      },
     },
   );
 

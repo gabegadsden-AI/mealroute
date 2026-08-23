@@ -22,6 +22,11 @@ export async function createClient() {
           }
         },
       },
+      global: {
+        headers: {
+          "Accept-Language": "en",
+        },
+      },
     },
   );
 }

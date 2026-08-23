@@ -6,9 +6,13 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
       auth: {
-        // Force English for auth flows regardless of browser locale
         detectSessionInUrl: true,
         flowType: "pkce",
+      },
+      global: {
+        headers: {
+          "Accept-Language": "en",
+        },
       },
     },
   );

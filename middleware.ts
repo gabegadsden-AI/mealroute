@@ -24,6 +24,11 @@ export async function middleware(request: NextRequest) {
           });
         },
       },
+      global: {
+        headers: {
+          "Accept-Language": "en",
+        },
+      },
     },
   );
 
