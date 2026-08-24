@@ -1,4 +1,5 @@
 import { calculateVerifiedIngredients } from "./nutrition-calculator";
+import { createClient } from "../../../lib/supabase/server";
 
 type AnalyzeRequest = {
   image?: string;
@@ -10,7 +11,10 @@ type AnalyzeRequest = {
     notes?: string;
   };
   review?: {
-    ingredients?: { name?: string; amountGrams?: number; calories?: number; protein?: number; carbs?: number; fat?: number; fdcId?: number }[];
+    ingredients?: {
+      name?: string; amountGrams?: number; calories?: number; protein?: number; carbs?: number; fat?: number; fibre?: number; fdcId?: number;
+      labelNutrition?: { productName?: string; energyValue?: number; energyUnit?: "kcal" | "kJ"; carbs?: number; protein?: number; fat?: number; fibre?: number };
+    }[];
   };
 };
 
@@ -53,6 +57,11 @@ const schema = {
 
 export async function POST(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      return Response.json({ error: "Sign in to analyze meals." }, { status: 401 });
+    }
     const body = (await request.json()) as AnalyzeRequest;
     const submittedReviewIngredients = Array.isArray(body.review?.ingredients) ? body.review.ingredients : [];
     const isReview = body.mode === "review" || submittedReviewIngredients.length > 0;
@@ -65,11 +74,25 @@ export async function POST(request: Request) {
 
     const runtimeEnv = process.env as Record<string, string | undefined>;
     const reviewedIngredients = isReview
-      ? submittedReviewIngredients.slice(0, 20).map(item => ({
-          name: String(item.name || "").slice(0, 100),
-          amountGrams: Math.min(5000, Math.max(1, Math.round(Number(item.amountGrams) || 1))),
-          fdcId: Number.isFinite(Number(item.fdcId)) && Number(item.fdcId) > 0 ? Math.round(Number(item.fdcId)) : undefined,
-        })).filter(item => item.name)
+      ? submittedReviewIngredients.slice(0, 20).map(item => {
+          const label = item.labelNutrition;
+          const labelValues = label ? [label.energyValue, label.carbs, label.protein, label.fat, label.fibre].map(Number) : [];
+          const validLabel = Boolean(label && Number(label.energyValue) > 0 && labelValues.every(value => Number.isFinite(value) && value >= 0));
+          return {
+            name: String(item.name || "").slice(0, 100),
+            amountGrams: Math.min(5000, Math.max(1, Math.round(Number(item.amountGrams) || 1))),
+            fdcId: validLabel ? undefined : Number.isFinite(Number(item.fdcId)) && Number(item.fdcId) > 0 ? Math.round(Number(item.fdcId)) : undefined,
+            labelNutrition: validLabel ? {
+              productName: String(label?.productName || item.name || "Packaged food").slice(0, 120),
+              energyValue: Number(label?.energyValue),
+              energyUnit: label?.energyUnit === "kJ" ? "kJ" as const : "kcal" as const,
+              carbs: Number(label?.carbs),
+              protein: Number(label?.protein),
+              fat: Number(label?.fat),
+              fibre: Number(label?.fibre),
+            } : undefined,
+          };
+        }).filter(item => item.name)
       : [];
     if (isReview && reviewedIngredients.length === 0) {
       return Response.json({ error: "At least one confirmed ingredient and gram amount is required." }, { status: 400 });
@@ -81,28 +104,20 @@ export async function POST(request: Request) {
       const protein = round1(ingredients.reduce((sum, item) => sum + item.protein, 0));
       const carbs = round1(ingredients.reduce((sum, item) => sum + item.carbs, 0));
       const fat = round1(ingredients.reduce((sum, item) => sum + item.fat, 0));
-      return Response.json({
-        analysis: {
-          mealName: body.previousAnalysis?.mealName || "Confirmed meal",
-          calories: { low: calories, high: calories, best: calories },
-          protein,
-          carbs,
-          fat,
-          fibre: 0,
-          ingredients,
-          confidence: body.previousAnalysis?.confidence || "High",
-          uncertainties: [],
-          clarifyingQuestions: [],
-          notes: "Nutrition calculated from your confirmed foods, exact gram amounts, and the displayed USDA FoodData Central records.",
-          calculationMethod: "verified_database",
-        },
-      });
+      const fibre = round1(ingredients.reduce((sum, item) => sum + item.fibre, 0));
+      const sourceKinds = new Set(ingredients.map(item => item.calculationSource));
+      const calculationMethod = sourceKinds.size > 1 ? "mixed_sources" : sourceKinds.has("nutrition_label") ? "nutrition_label" : "verified_database";
+      return Response.json({ analysis: {
+        mealName: body.previousAnalysis?.mealName || "Confirmed meal",
+        calories: { low: calories, high: calories, best: calories }, protein, carbs, fat, fibre, ingredients,
+        confidence: body.previousAnalysis?.confidence || "High", uncertainties: [], clarifyingQuestions: [],
+        notes: "Nutrition calculated from your confirmed foods, exact gram amounts, and the displayed source for each ingredient.",
+        calculationMethod,
+      }});
     }
 
     const apiKey = runtimeEnv.OPENAI_API_KEY;
-    if (!apiKey) {
-      return Response.json({ error: "Live AI analysis has not been securely connected yet." }, { status: 503 });
-    }
+    if (!apiKey) return Response.json({ error: "Live AI analysis has not been securely connected yet." }, { status: 503 });
 
     const isRefinement = Array.isArray(body.answers) && body.answers.some(Boolean);
 
@@ -111,18 +126,31 @@ export async function POST(request: Request) {
       : "";
     const prompt = `Analyze this meal photograph for a calorie-tracking app. Identify only foods reasonably supported by the image; never substitute a canned meal or invent an ingredient as certain. Estimate each visible portion conservatively and return one whole-number amountGrams value for every ingredient. Display a single gram number such as 120, never a range and never words such as "about" or "approximately". Calculate calories, protein, carbohydrates, and fat for every ingredient and for the complete meal. Do not assume restaurant-sized portions. Do not add oil, butter, dressing, or sauce as consumed unless it is visible or confirmed by the user; when it is uncertain, mention it and ask about it instead. The best calorie estimate must closely equal the sum of ingredient calories and must fall inside the low-to-high range. Total protein, carbs, and fat should closely equal the sums of the ingredient-level macros. Use a wider calorie range when portion size is visually uncertain. Ask zero to two short clarifying questions only when an answer could materially improve the estimate, prioritizing portion size and hidden cooking fats or sauces. Nutrition values and image-derived gram amounts must be presented as estimates, not facts. If the image is not food or is too unclear, say so in mealName and notes, use Low confidence, and do not fabricate a meal.${refinementContext}`;
 
-    const apiResponse = await fetch("https://api.openai.com/v1/responses", {
+    // ─── OpenAI Chat Completions API (corrected) ───────────────────────
+    // Previous code used /v1/responses (non-existent), gpt-5.6 (invalid model),
+    // input/input_text/input_image (wrong payload format), and output/output_text
+    // (wrong response parsing). This uses the standard Chat Completions API.
+    const apiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: runtimeEnv.OPENAI_MODEL || "gpt-5.6",
-        store: false,
-        max_output_tokens: 1800,
-        input: [{
+        model: runtimeEnv.OPENAI_MODEL || "gpt-4o",
+        max_tokens: 1800,
+        messages: [{
           role: "user",
-          content: [{ type: "input_text", text: prompt }, { type: "input_image", image_url: body.image, detail: "high" }],
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: body.image, detail: "high" } },
+          ],
         }],
-        text: { format: { type: "json_schema", name: "food_analysis", strict: true, schema } },
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "food_analysis",
+            strict: true,
+            schema,
+          },
+        },
       }),
     });
 
@@ -132,9 +160,8 @@ export async function POST(request: Request) {
       return Response.json({ error: message }, { status: apiResponse.status });
     }
 
-    const outputText = responseBody.output
-      ?.flatMap((item: any) => item.content || [])
-      .find((item: any) => item.type === "output_text")?.text;
+    // Chat Completions returns { choices: [{ message: { content: "..." } }] }
+    const outputText = responseBody.choices?.[0]?.message?.content;
     if (!outputText) {
       return Response.json({ error: "No food analysis was returned. Please try another photo." }, { status: 502 });
     }
