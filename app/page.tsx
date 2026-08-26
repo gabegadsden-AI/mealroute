@@ -402,7 +402,7 @@ export default function Home() {
       const res = await fetch("/api/generate-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days }),
+        body: JSON.stringify({ days, startDate: localDateKey() }),
       });
       const data = await res.json();
       if (data.error) {
@@ -421,8 +421,9 @@ export default function Home() {
   async function handleAcceptPlan(acceptedMeals?: PlanMeal[]) {
     if (!generatedPlan) return;
     const mealsToSave = acceptedMeals || generatedPlan.meals;
-    const newPlanned: Meal[] = mealsToSave.map((meal: PlanMeal) => ({
-      id: Date.now() + Math.random() * 100000,
+    const baseId = Date.now();
+    const newPlanned: Meal[] = mealsToSave.map((meal: PlanMeal, idx: number) => ({
+      id: baseId * 1000 + idx,
       type: "Planned meal",
       name: meal.foodName,
       calories: meal.calories,

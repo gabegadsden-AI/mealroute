@@ -42,6 +42,36 @@ function numberValue(value: unknown) {
   return Number.isFinite(number) ? number : 0;
 }
 
+/**
+ * Normalise a database date value to a "YYYY-MM-DD" key.
+ * Handles three scenarios:
+ *   1. Already a date key string ("2026-08-26") → returned as-is
+ *   2. An ISO timestamp string ("2026-08-26T00:00:00.000Z") → truncated to date
+ *   3. A Date object → formatted with local components
+ * Returns null if the value can't be parsed.
+ */
+function toDateKey(value: unknown): string | null {
+  if (value == null) return null;
+  const str: string = String(value);
+  // Already a date key?
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [y, m, d] = str.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    if (date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d) return str;
+  }
+  // ISO timestamp? Extract the date portion.
+  const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  // Date object?
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  return null;
+}
+
 function totalsFor(meals: CloudMeal[]) {
   return meals.filter(meal => meal.eaten).reduce((totals, meal) => ({
     calories: totals.calories + meal.calories,
@@ -83,6 +113,7 @@ export async function loadCloudState(supabase: SupabaseClient, userId: string) {
   const planned: CloudMeal[] = [];
 
   (mealsResult.data || []).forEach(row => {
+    const dateKey = toDateKey(row.meal_date);
     const meal: CloudMeal = {
       id: numberValue(row.client_id),
       type: String(row.meal_type || "Logged meal"),
@@ -96,16 +127,15 @@ export async function loadCloudState(supabase: SupabaseClient, userId: string) {
       locked: row.locked ? true : undefined,
       color: String(row.color || "salmon"),
       ingredients: normalizeMealIngredients(row.ingredients),
-      plannedDate: row.entry_kind === "planned" && isDateKey(row.meal_date) ? String(row.meal_date) : undefined,
+      plannedDate: row.entry_kind === "planned" ? (dateKey || undefined) : undefined,
       mealSlot: row.entry_kind === "planned" ? normalizeMealSlot(row.meal_slot) : undefined,
     };
     if (row.entry_kind === "planned") {
       planned.push(meal);
       return;
     }
-    const date = String(row.meal_date || "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-    days[date] = [...(days[date] || []), meal];
+    if (!dateKey) return; // skip rows with unparseable dates
+    days[dateKey] = [...(days[dateKey] || []), meal];
   });
 
   const savedProducts: CloudSavedProduct[] = (productsResult.data || []).map(row => ({
