@@ -59,7 +59,7 @@ export default function SignupPage() {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <div className="auth-brand"><span>NP</span><div><strong>NutriPath</strong><small>Plan better. Track smarter.</small></div></div>
+        <div className="auth-brand"><span>MR</span><div><strong>MealRoute</strong><small>Plan your meals. Track your way.</small></div></div>
         {sent ? (
           <div className="auth-confirmation">
             <p className="eyebrow">CHECK YOUR EMAIL</p>
@@ -70,7 +70,7 @@ export default function SignupPage() {
         ) : (
           <>
             <p className="eyebrow">CREATE YOUR ACCOUNT</p>
-            <h1>Start with NutriPath</h1>
+            <h1>Start with MealRoute</h1>
             <p className="auth-intro">Create an account before setting your nutrition goals.</p>
             {error && <div className="auth-error" role="alert">{error}</div>}
             <form className="auth-form" onSubmit={submit}>

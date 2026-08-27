@@ -1,16 +1,16 @@
 "use client";
 import { useState, useMemo } from "react";
-import { type NutriPathProfile } from "../../lib/profile";
+import { type MealRouteProfile } from "../../lib/profile";
 import { type ProfileGoalUpdate, type ProfileMacroUpdate } from "../../lib/app-utils";
 import { type MacroTargets, macroCalories, macroPercentages, suggestedMacroTargets } from "../../lib/macro-targets";
 import { activityLabels, cmToImperial, goalLabels, suggestedCalories, type Activity, type Goal } from "../../lib/calorie-goal";
 
 export function Brand() {
-  return <div className="brand"><div className="brandmark">N</div><div><strong>NutriPath</strong><small>Plan better. Track simply. Eat your way.</small></div></div>;
+  return <div className="brand"><div className="brandmark">M</div><div><strong>MealRoute</strong><small>Plan your meals. Track your way.</small></div></div>;
 }
 
 export function profileInitials(name?: string | null) {
-  const initials = String(name || "NutriPath")
+  const initials = String(name || "MealRoute")
     .trim()
     .split(/\s+/)
     .slice(0, 2)
@@ -19,7 +19,7 @@ export function profileInitials(name?: string | null) {
   return initials || "NP";
 }
 
-export function profileGoalLabel(goal?: NutriPathProfile["primary_goal"]) {
+export function profileGoalLabel(goal?: MealRouteProfile["primary_goal"]) {
   if (goal === "lose_weight") return "Lose weight";
   if (goal === "build_muscle") return "Build muscle";
   if (goal === "eat_healthier") return "Eat healthier";
@@ -32,7 +32,7 @@ export function GoalsEditor({
   onBack,
   onSave,
 }: {
-  profile: NutriPathProfile;
+  profile: MealRouteProfile;
   onBack: () => void;
   onSave: (values: ProfileGoalUpdate) => Promise<string>;
 }) {
@@ -187,7 +187,7 @@ export function MacroTargetsEditor({
   onBack,
   onSave,
 }: {
-  profile: NutriPathProfile;
+  profile: MealRouteProfile;
   calorieGoal: number;
   currentTargets: MacroTargets;
   onBack: () => void;
@@ -263,7 +263,7 @@ export function MacroTargetsEditor({
     <button className="goals-back" type="button" onClick={onBack}>‹ Profile</button>
     <p className="eyebrow">MACRO TARGETS</p>
     <h2>Set your daily macros</h2>
-    <p className="modal-sub">NutriPath converts your {calorieGoal.toLocaleString()} kcal target into a general starting estimate. You can adjust each value.</p>
+    <p className="modal-sub">MealRoute converts your {calorieGoal.toLocaleString()} kcal target into a general starting estimate. You can adjust each value.</p>
 
     <section className="goals-section macro-suggested-section">
       <div className="goals-section-title"><strong>Suggested starting point</strong><span>Based on your calorie target and {profileGoalLabel(profile.primary_goal).toLowerCase()} goal</span></div>
@@ -283,7 +283,7 @@ export function MacroTargetsEditor({
       <div className="macro-percent-row"><span>Protein {percentages.protein}%</span><span>Carbs {percentages.carbs}%</span><span>Fat {percentages.fat}%</span></div>
     </section>
 
-    {outsideGeneralRange && <div className="connection-notice"><b>Custom distribution</b><span>One or more targets fall outside the general adult AMDR ranges. NutriPath will save your choice, but consider checking it with a qualified health professional.</span></div>}
+    {outsideGeneralRange && <div className="connection-notice"><b>Custom distribution</b><span>One or more targets fall outside the general adult AMDR ranges. MealRoute will save your choice, but consider checking it with a qualified health professional.</span></div>}
     <p className="goals-safety">General adult reference ranges: protein 10–35%, carbohydrates 45–65%, and fat 20–35% of calories. Carbohydrate and protein use 4 kcal/g; fat uses 9 kcal/g. <a href="https://nap.nationalacademies.org/skim.php?chap=936-967&record_id=10490" target="_blank" rel="noreferrer">National Academies reference</a>.</p>
 
     {error && <div className="auth-error" role="alert">{error}</div>}

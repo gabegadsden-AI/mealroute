@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { profileSelect, type NutriPathProfile } from "../../lib/profile";
+import { profileSelect, type MealRouteProfile } from "../../lib/profile";
 import { createClient } from "../../lib/supabase/server";
 import OnboardingWizard from "./wizard";
 
@@ -21,7 +21,7 @@ export default async function OnboardingPage() {
   return (
     <OnboardingWizard
       userId={userId}
-      initialProfile={(profile as NutriPathProfile | null) || null}
+      initialProfile={(profile as MealRouteProfile | null) || null}
     />
   );
 }

@@ -35,7 +35,7 @@ export default function UpdatePasswordPage() {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <div className="auth-brand"><span>NP</span><div><strong>NutriPath</strong><small>Plan better. Track smarter.</small></div></div>
+        <div className="auth-brand"><span>MR</span><div><strong>MealRoute</strong><small>Plan your meals. Track your way.</small></div></div>
         <p className="eyebrow">NEW PASSWORD</p>
         <h1>Choose a new password</h1>
         {error && <div className="auth-error" role="alert">{error}</div>}

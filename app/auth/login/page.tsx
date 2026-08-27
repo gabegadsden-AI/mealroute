@@ -37,9 +37,9 @@ export default function LoginPage() {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <div className="auth-brand"><span>NP</span><div><strong>NutriPath</strong><small>Plan better. Track smarter.</small></div></div>
+        <div className="auth-brand"><span>MR</span><div><strong>MealRoute</strong><small>Plan your meals. Track your way.</small></div></div>
         <p className="eyebrow">WELCOME BACK</p>
-        <h1>Log in to NutriPath</h1>
+        <h1>Log in to MealRoute</h1>
         <p className="auth-intro">Your meals, plans and nutrition history will be available on your signed-in devices.</p>
         {message && <div className="auth-message">{message}</div>}
         {error && <div className="auth-error" role="alert">{error}</div>}
@@ -49,7 +49,7 @@ export default function LoginPage() {
           <div className="auth-form-row"><Link href="/auth/forgot-password">Forgot password?</Link></div>
           <button className="primary full" disabled={loading}>{loading ? "Logging in…" : "Log in"}</button>
         </form>
-        <p className="auth-switch">New to NutriPath? <Link href="/auth/signup">Create an account</Link></p>
+        <p className="auth-switch">New to MealRoute? <Link href="/auth/signup">Create an account</Link></p>
       </section>
     </main>
   );

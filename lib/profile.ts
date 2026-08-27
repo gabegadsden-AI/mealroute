@@ -1,4 +1,4 @@
-export type NutriPathProfile = {
+export type MealRouteProfile = {
   user_id: string;
   name: string | null;
   weight_kg: number | null;

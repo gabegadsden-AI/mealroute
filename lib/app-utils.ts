@@ -1,5 +1,5 @@
 import { type PlannedIngredient } from "./grocery-list";
-import { type NutriPathProfile } from "./profile";
+import { type MealRouteProfile } from "./profile";
 import {
   isDateKey,
   normalizeMealSlot,
@@ -34,11 +34,11 @@ export type MealHistory = Record<string, Meal[]>;
 export type StoredMealHistory = { version: 2; days: MealHistory; planned: Meal[] };
 export type LegacyImportData = StoredMealHistory & { savedProducts: SavedPackagedProduct[] };
 export type ProfileGoalUpdate = Pick<
-  NutriPathProfile,
+  MealRouteProfile,
   "weight_kg" | "height_cm" | "weight_unit" | "height_unit" | "primary_goal" | "activity_level" | "calorie_goal" | "suggested_calorie_goal"
 >;
 export type ProfileMacroUpdate = Pick<
-  NutriPathProfile,
+  MealRouteProfile,
   "protein_goal_g" | "carbs_goal_g" | "fat_goal_g" | "macro_targets_custom"
 >;
 export type WeightSaveResult = {
@@ -46,11 +46,11 @@ export type WeightSaveResult = {
   profileUpdated: boolean;
 };
 
-export const SAVED_PRODUCTS_KEY = "nutripath:saved-packaged-products:v1";
-export const DAILY_MEALS_KEY = "nutripath:daily-meals:v1";
-export const MEAL_HISTORY_KEY = "nutripath:meal-history:v2";
-export const LEGACY_IMPORT_DECISION_KEY = "nutripath:legacy-import-decision:v1";
-export const GROCERY_WEEK_KEY = "nutripath:grocery-week:v1";
+export const SAVED_PRODUCTS_KEY = "mealroute:saved-packaged-products:v1";
+export const DAILY_MEALS_KEY = "mealroute:daily-meals:v1";
+export const MEAL_HISTORY_KEY = "mealroute:meal-history:v2";
+export const LEGACY_IMPORT_DECISION_KEY = "mealroute:legacy-import-decision:v1";
+export const GROCERY_WEEK_KEY = "mealroute:grocery-week:v1";
 
 export function localDateKey(date = new Date()) {
   const year = date.getFullYear();

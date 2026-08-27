@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { localDateKey, mealTotals, dateFromKey, type MealHistory, type WeightSaveResult } from "../../lib/app-utils";
 import { type WeightLog, weightInUnit, weightToKg } from "../../lib/weight-progress";
-import { type NutriPathProfile } from "../../lib/profile";
+import { type MealRouteProfile } from "../../lib/profile";
 import { type ManualFoodItem, calculateManualNutrition, customFoodKey, packagedProductFood } from "../../lib/manual-food";
 import { type SavedPackagedProduct } from "../../lib/app-utils";
 import { type MealSlot, mealSlotLabels } from "../../lib/weekly-plan";
@@ -70,7 +70,7 @@ export function Progress({
   });
   return <>
     <div className="segment">{["Week", "Month", "3 months"].map(x => <button key={x} className={range === x ? "active" : ""} onClick={() => setRange(x)}>{x}</button>)}</div>
-    <section className="weekly-win"><div className="spark">✦</div><div><p className="eyebrow">MEAL HISTORY</p><h2>{trackedDays.length ? `${trackedDays.length} ${trackedDays.length === 1 ? "day" : "days"} tracked.` : "Your history starts here."}</h2><p>{trackedDays.length ? `${loggedMeals} meals are saved in this ${range.toLowerCase()} view.` : "Log your first meal and NutriPath will build your calorie and macro history."}</p></div></section>
+    <section className="weekly-win"><div className="spark">✦</div><div><p className="eyebrow">MEAL HISTORY</p><h2>{trackedDays.length ? `${trackedDays.length} ${trackedDays.length === 1 ? "day" : "days"} tracked.` : "Your history starts here."}</h2><p>{trackedDays.length ? `${loggedMeals} meals are saved in this ${range.toLowerCase()} view.` : "Log your first meal and MealRoute will build your calorie and macro history."}</p></div></section>
     <section className="stats-grid"><div><span>Days logged</span><strong>{trackedDays.length}</strong><small>of {rangeDays} days</small></div><div><span>Avg. calories</span><strong>{averageCalories.toLocaleString()}</strong><small>{averageCalories ? `${Math.abs(target - averageCalories).toLocaleString()} ${averageCalories <= target ? "below" : "above"} target` : "No entries yet"}</small></div><div><span>Protein target</span><strong>{proteinTargetDays}/{trackedDays.length || 0}</strong><small>tracked days reached</small></div><div><span>Meals logged</span><strong>{loggedMeals}</strong><small>confirmed as eaten</small></div></section>
     <section className="chart-card"><div className="section-heading"><div><p className="eyebrow">LAST 7 DAYS</p><h2>Calories by day</h2></div><span>{target.toLocaleString()} goal</span></div><div className="chart"><div className="goal-line"><span>Goal</span></div>{chartDays.map(day => <div className="bar-wrap" key={day.key}><div className={day.key === (today ? localDateKey(today) : "") ? "bar active" : "bar"} style={{ height: `${Math.max(8, Math.min(110, day.value / 20))}px` }}><span>{day.value || "–"}</span></div><small>{day.day}</small></div>)}</div></section>
     <section className="weight-progress-card">
@@ -89,7 +89,7 @@ export function Progress({
           </div>
           <div className="weight-chart-dates"><span>{dateFromKey(periodWeightLogs[0].logged_on).toLocaleDateString([], { day: "numeric", month: "short" })}</span><span>{dateFromKey(periodWeightLogs[periodWeightLogs.length - 1].logged_on).toLocaleDateString([], { day: "numeric", month: "short" })}</span></div>
         </>
-        : <div className="weight-empty"><span>Log a measurement to start your private weight history.</span><small>NutriPath stores it under your signed-in account.</small></div>}
+        : <div className="weight-empty"><span>Log a measurement to start your private weight history.</span><small>MealRoute stores it under your signed-in account.</small></div>}
     </section>
   </>;
 }
@@ -102,7 +102,7 @@ export function WeightProgressEditor({
   onSave,
   onDelete,
 }: {
-  profile: NutriPathProfile;
+  profile: MealRouteProfile;
   logs: WeightLog[];
   onBack: () => void;
   onReviewGoals: () => void;
@@ -176,7 +176,7 @@ export function WeightProgressEditor({
     <button className="goals-back" type="button" onClick={onBack}>‹ Profile</button>
     <p className="eyebrow">WEIGHT PROGRESS</p>
     <h2>Log your weight</h2>
-    <p className="modal-sub">NutriPath uses your preferred {unit} display and securely stores the underlying measurement in kilograms.</p>
+    <p className="modal-sub">MealRoute uses your preferred {unit} display and securely stores the underlying measurement in kilograms.</p>
 
     <form className="weight-entry-form" onSubmit={submitWeight}>
       <label><span>Date</span><input type="date" value={loggedOn} max={today} onChange={event => selectDate(event.target.value)} /></label>
@@ -198,7 +198,7 @@ export function WeightProgressEditor({
         ? recentLogs.map(log => <div key={log.id}><span>{dateFromKey(log.logged_on).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</span><strong>{weightInUnit(log.weight_kg, unit).toFixed(1)} {unit}</strong><button type="button" disabled={deletingId === log.id} onClick={() => deleteEntry(log)}>{deletingId === log.id ? "Removing…" : "Remove"}</button></div>)
         : <p>No measurements saved yet.</p>}
     </section>
-    <p className="goals-safety">Weight changes can affect suggested targets. NutriPath always asks before you review or change calorie and macro targets.</p>
+    <p className="goals-safety">Weight changes can affect suggested targets. MealRoute always asks before you review or change calorie and macro targets.</p>
   </div>;
 }
 
@@ -335,7 +335,7 @@ export function ManualFoodEditor({
     setError("");
     const saved = await onAdd(selectedFood, preview.grams, destination);
     if (!saved) {
-      setError("NutriPath could not complete this entry. Check the message above and try again.");
+      setError("MealRoute could not complete this entry. Check the message above and try again.");
       setAdding(false);
     }
   }

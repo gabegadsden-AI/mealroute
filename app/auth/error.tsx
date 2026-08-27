@@ -11,7 +11,7 @@ export default function AuthError({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error("[NutriPath] Auth error:", error);
+    console.error("[MealRoute] Auth error:", error);
   }, [error]);
 
   return (

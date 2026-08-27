@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NutriPath — Plan better. Track simply. Eat your way.",
+  title: "MealRoute — Plan your meals. Track your way.",
   description: "Simple meal planning, food tracking and AI-assisted nutrition estimates.",
 };
 

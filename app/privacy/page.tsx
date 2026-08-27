@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — NutriPath",
-  description: "Privacy Policy for NutriPath, a proactive nutrition planning app.",
+  title: "Privacy Policy — MealRoute",
+  description: "Privacy Policy for MealRoute, a proactive nutrition planning app.",
 };
 
 const styles = {
@@ -120,8 +120,8 @@ export default function PrivacyPolicy() {
         <div style={styles.header}>
           <div style={styles.logo}>NP</div>
           <div>
-            <p style={styles.brand}>NutriPath</p>
-            <p style={styles.tagline}>Plan better. Track smarter.</p>
+            <p style={styles.brand}>MealRoute</p>
+            <p style={styles.tagline}>Plan your meals. Track your way.</p>
           </div>
         </div>
 
@@ -132,7 +132,7 @@ export default function PrivacyPolicy() {
         <div style={styles.section}>
           <h2 style={styles.h2}>1. Overview</h2>
           <p style={styles.p}>
-            NutriPath (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) is a nutrition planning app that helps you track meals, generate AI meal plans, and monitor your nutritional intake. This Privacy Policy explains what data we collect, how we use it, and the choices you have.
+            MealRoute (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) is a nutrition planning app that helps you track meals, generate AI meal plans, and monitor your nutritional intake. This Privacy Policy explains what data we collect, how we use it, and the choices you have.
           </p>
           <p style={styles.p}>
             We are committed to protecting your privacy and being transparent about our data practices.
@@ -215,7 +215,7 @@ export default function PrivacyPolicy() {
 
         <div style={styles.section}>
           <h2 style={styles.h2}>5. Third-Party Services</h2>
-          <p style={styles.p}>NutriPath uses the following third-party services to operate:</p>
+          <p style={styles.p}>MealRoute uses the following third-party services to operate:</p>
           <ul style={styles.ul}>
             <li style={styles.li}><strong style={styles.accent}>Supabase</strong> — Authentication and database storage. Your email and nutrition data are stored here. <a href="https://supabase.com/privacy" style={styles.link} target="_blank" rel="noopener noreferrer">Supabase Privacy Policy</a></li>
             <li style={styles.li}><strong style={styles.accent}>USDA FoodData Central</strong> — Public nutritional database used to look up food information. No personal data is sent. <a href="https://www.usda.gov/privacy" style={styles.link} target="_blank" rel="noopener noreferrer">USDA Privacy Policy</a></li>
@@ -230,7 +230,7 @@ export default function PrivacyPolicy() {
         <div style={styles.section}>
           <h2 style={styles.h2}>6. AI Photo Analysis</h2>
           <p style={styles.p}>
-            When you upload a meal photo for analysis, the image is sent to OpenAI&apos;s API for processing. NutriPath uses the AI response to estimate ingredients, portions, and nutritional content.
+            When you upload a meal photo for analysis, the image is sent to OpenAI&apos;s API for processing. MealRoute uses the AI response to estimate ingredients, portions, and nutritional content.
           </p>
           <p style={styles.p}>
             We recommend not uploading photos containing sensitive personal information. Photos are processed on-demand and are not stored permanently on our servers unless you choose to save them to your meal log.
@@ -240,10 +240,10 @@ export default function PrivacyPolicy() {
         <div style={styles.section}>
           <h2 style={styles.h2}>7. Data Sharing</h2>
           <p style={styles.p}>
-            We do <strong style={styles.accent}>not</strong> share your personal data with any third party for marketing or advertising purposes. Your data is only shared with the third-party services listed above for the sole purpose of operating NutriPath.
+            We do <strong style={styles.accent}>not</strong> share your personal data with any third party for marketing or advertising purposes. Your data is only shared with the third-party services listed above for the sole purpose of operating MealRoute.
           </p>
           <p style={styles.p}>
-            We may disclose data if required by law, court order, or to protect the rights, property, or safety of NutriPath or its users.
+            We may disclose data if required by law, court order, or to protect the rights, property, or safety of MealRoute or its users.
           </p>
         </div>
 
@@ -272,28 +272,28 @@ export default function PrivacyPolicy() {
           </ul>
           <p style={styles.p}>
             To exercise any of these rights, contact us at{" "}
-            <a href="mailto:support@nutripath.app" style={styles.link}>support@nutripath.app</a>.
+            <a href="mailto:support@mealroute.app" style={styles.link}>support@mealroute.app</a>.
           </p>
         </div>
 
         <div style={styles.section}>
           <h2 style={styles.h2}>10. Cookies &amp; Tracking</h2>
           <p style={styles.p}>
-            NutriPath uses minimal cookies for authentication (keeping you logged in). We use Google Analytics for anonymized traffic analysis. We do not use tracking cookies for advertising.
+            MealRoute uses minimal cookies for authentication (keeping you logged in). We use Google Analytics for anonymized traffic analysis. We do not use tracking cookies for advertising.
           </p>
         </div>
 
         <div style={styles.section}>
           <h2 style={styles.h2}>11. Children&apos;s Privacy</h2>
           <p style={styles.p}>
-            NutriPath is not directed at children under 16. We do not knowingly collect data from anyone under 16. If you believe a minor has registered an account, please contact us and we will delete it.
+            MealRoute is not directed at children under 16. We do not knowingly collect data from anyone under 16. If you believe a minor has registered an account, please contact us and we will delete it.
           </p>
         </div>
 
         <div style={styles.section}>
           <h2 style={styles.h2}>12. International Users</h2>
           <p style={styles.p}>
-            NutriPath is available globally. If you are accessing the Service from outside New Zealand, your data may be processed and stored in servers located in other countries. By using the Service, you consent to this transfer of data.
+            MealRoute is available globally. If you are accessing the Service from outside New Zealand, your data may be processed and stored in servers located in other countries. By using the Service, you consent to this transfer of data.
           </p>
         </div>
 
@@ -315,17 +315,17 @@ export default function PrivacyPolicy() {
           <h2 style={styles.h2}>15. Contact</h2>
           <p style={styles.p}>
             Questions about your privacy? Contact us at{" "}
-            <a href="mailto:support@nutripath.app" style={styles.link}>support@nutripath.app</a>.
+            <a href="mailto:support@mealroute.app" style={styles.link}>support@mealroute.app</a>.
           </p>
         </div>
 
         <div style={styles.footer}>
           <p>
-            <a href="/" style={styles.footerLink}>← Back to NutriPath</a>
+            <a href="/" style={styles.footerLink}>← Back to MealRoute</a>
             <span style={{ margin: "0 12px", color: "#333" }}>·</span>
             <a href="/terms" style={styles.footerLink}>Terms of Service</a>
           </p>
-          <p style={{ marginTop: "8px" }}>© 2026 NutriPath. All rights reserved.</p>
+          <p style={{ marginTop: "8px" }}>© 2026 MealRoute. All rights reserved.</p>
         </div>
       </div>
     </div>

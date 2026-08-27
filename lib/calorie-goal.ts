@@ -1,8 +1,8 @@
-import type { NutriPathProfile } from "./profile";
+import type { MealRouteProfile } from "./profile";
 
-export type Goal = NonNullable<NutriPathProfile["primary_goal"]>;
-export type Activity = NonNullable<NutriPathProfile["activity_level"]>;
-export type CalculationSex = NonNullable<NutriPathProfile["calculation_sex"]>;
+export type Goal = NonNullable<MealRouteProfile["primary_goal"]>;
+export type Activity = NonNullable<MealRouteProfile["activity_level"]>;
+export type CalculationSex = NonNullable<MealRouteProfile["calculation_sex"]>;
 
 export const activityFactors: Record<Activity, number> = {
   sedentary: 1.2,

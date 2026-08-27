@@ -50,7 +50,7 @@ import {
   type GroceryUnit,
   type PlannedIngredient,
 } from "../lib/grocery-list";
-import { profileSelect, type NutriPathProfile } from "../lib/profile";
+import { profileSelect, type MealRouteProfile } from "../lib/profile";
 import { createClient } from "../lib/supabase/client";
 import {
   loadWeightLogs,
@@ -145,7 +145,7 @@ const navItems: { id: Tab; label: string; icon: string }[] = [
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("today");
-  const [profile, setProfile] = useState<NutriPathProfile | null>(null);
+  const [profile, setProfile] = useState<MealRouteProfile | null>(null);
   const [userId, setUserId] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
   const [dataReady, setDataReady] = useState(false);
@@ -241,7 +241,7 @@ export default function Home() {
         return;
       }
 
-      const loadedProfile = data as NutriPathProfile;
+      const loadedProfile = data as MealRouteProfile;
       const today = localDateKey();
       const currentPlanWeek = weekStartKey(today);
       const historyCacheKey = userStorageKey(MEAL_HISTORY_KEY, userData.user.id);
@@ -344,7 +344,7 @@ export default function Home() {
             setLegacyImport(legacy);
           }
         } catch {
-          notify("NutriPath could not check this browser for older data.");
+          notify("MealRoute could not check this browser for older data.");
         }
       }
 
@@ -499,7 +499,7 @@ export default function Home() {
       return true;
     } catch {
       notify(cacheSaved
-        ? "Saved on this device. NutriPath will need another update to sync it to your account."
+        ? "Saved on this device. MealRoute will need another update to sync it to your account."
         : "This change could not be saved. Please check your connection and try again.");
       return false;
     }
@@ -614,7 +614,7 @@ export default function Home() {
       return "Your goals could not be saved. Please check your connection and try again.";
     }
 
-    setProfile(data as NutriPathProfile);
+    setProfile(data as MealRouteProfile);
     notify("Your goals and daily calorie target are updated");
     return "";
   }
@@ -633,7 +633,7 @@ export default function Home() {
       return "Your macro targets could not be saved. Please check your connection and try again.";
     }
 
-    setProfile(data as NutriPathProfile);
+    setProfile(data as MealRouteProfile);
     notify("Your protein, carbohydrate, and fat targets are updated");
     return "";
   }
@@ -661,7 +661,7 @@ export default function Home() {
           .single();
 
         if (!error && data) {
-          setProfile(data as NutriPathProfile);
+          setProfile(data as MealRouteProfile);
           profileUpdated = true;
         }
       }
@@ -693,7 +693,7 @@ export default function Home() {
           .eq("user_id", userId)
           .select(profileSelect)
           .single();
-        if (!error && data) setProfile(data as NutriPathProfile);
+        if (!error && data) setProfile(data as MealRouteProfile);
       }
 
       notify("Weight entry removed");
@@ -733,7 +733,7 @@ export default function Home() {
       } catch {
         // The cloud import succeeded even if this browser blocks local storage cleanup.
       }
-      notify("Your earlier NutriPath data is now saved to this account.");
+      notify("Your earlier MealRoute data is now saved to this account.");
     } catch {
       notify("Your earlier data could not be imported. Nothing was removed; please try again.");
     } finally {
@@ -753,9 +753,9 @@ export default function Home() {
       }
       setProfile(current => current ? { ...current, local_import_status: "skipped" } : current);
       setLegacyImport(null);
-      notify("This account will start with its own NutriPath data.");
+      notify("This account will start with its own MealRoute data.");
     } catch {
-      notify("NutriPath could not save that choice. Please try again.");
+      notify("MealRoute could not save that choice. Please try again.");
     } finally {
       setImportingLegacy(false);
     }
@@ -768,7 +768,7 @@ export default function Home() {
     const { error } = await supabase.auth.signOut();
     if (error) {
       setLoggingOut(false);
-      notify("NutriPath could not log you out. Please try again.");
+      notify("MealRoute could not log you out. Please try again.");
       return;
     }
     window.location.replace("/auth/login");
@@ -870,7 +870,7 @@ export default function Home() {
     const nextTotal = water + Math.round(amountMl);
     if (!Number.isFinite(amountMl) || amountMl <= 0) return "Enter an amount greater than 0 ml.";
     if (nextTotal > MAX_DAILY_WATER_ML) {
-      return `That would exceed NutriPath’s ${MAX_DAILY_WATER_ML.toLocaleString()} ml daily entry limit.`;
+      return `That would exceed MealRoute’s ${MAX_DAILY_WATER_ML.toLocaleString()} ml daily entry limit.`;
     }
     return saveWaterTotal(nextTotal);
   }
@@ -889,7 +889,7 @@ export default function Home() {
       .select(profileSelect)
       .single();
     if (error || !data) return "Your water goal could not be saved. Check your connection and try again.";
-    setProfile(data as NutriPathProfile);
+    setProfile(data as MealRouteProfile);
     notify("Your daily water goal is updated");
     return "";
   }
@@ -1041,7 +1041,7 @@ export default function Home() {
           ...current.filter(item => item.sourceKey !== saved.sourceKey),
         ].slice(0, 30));
       } catch {
-        notify("The meal was saved, but NutriPath could not update Recent foods.");
+        notify("The meal was saved, but MealRoute could not update Recent foods.");
       }
     }
 
@@ -1113,7 +1113,7 @@ export default function Home() {
 
         <div className="content">
           {!dataReady
-            ? <div className="history-empty"><strong>Loading your NutriPath account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
+            ? <div className="history-empty"><strong>Loading your MealRoute account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
             : <>
               <ProfileCompletionBanner
                 hasCalorieGoal={!!(profile?.calorie_goal && Number(profile.calorie_goal) > 0)}
@@ -1148,7 +1148,7 @@ export default function Home() {
                         marginBottom: "16px",
                       }}>
                         <p className="eyebrow" style={{ margin: "0 0 6px" }}>AI PLAN GENERATOR</p>
-                        <h2 style={{ fontSize: "18px", margin: "0 0 8px", letterSpacing: "-.03em" }}>Let NutriPath plan your week</h2>
+                        <h2 style={{ fontSize: "18px", margin: "0 0 8px", letterSpacing: "-.03em" }}>Let MealRoute plan your week</h2>
                         <p style={{ color: "#8e9a91", fontSize: "12px", margin: "0 0 14px", lineHeight: 1.5 }}>
                           {foodPalette.length < 3
                             ? "Add at least 3 foods to your palette, then generate a balanced meal plan in seconds."
@@ -1219,9 +1219,9 @@ export default function Home() {
       {legacyImport && <div className="modal-backdrop"><section className="modal-sheet">
         <div className="modal-icon">↥</div>
         <p className="eyebrow">ONE-TIME IMPORT</p>
-        <h2>Bring your earlier NutriPath data into this account?</h2>
+        <h2>Bring your earlier MealRoute data into this account?</h2>
         <p className="modal-sub">This browser contains {legacyMealCount} {legacyMealCount === 1 ? "meal or plan" : "meals or plans"} and {legacyImport.savedProducts.length} saved {legacyImport.savedProducts.length === 1 ? "product" : "products"}. Importing saves them under this signed-in account without duplicating existing records.</p>
-        <div className="connection-notice"><b>Your account stays private</b><span>After import, this data is protected by your Supabase user ID and will not be shown to other NutriPath accounts.</span></div>
+        <div className="connection-notice"><b>Your account stays private</b><span>After import, this data is protected by your Supabase user ID and will not be shown to other MealRoute accounts.</span></div>
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}

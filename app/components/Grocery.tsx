@@ -59,7 +59,7 @@ export function Grocery({
   }
 
   if (!ready) {
-    return <div className="history-empty"><strong>Building your grocery list…</strong><span>NutriPath is combining ingredients from My Plan and restoring your saved checkmarks.</span></div>;
+    return <div className="history-empty"><strong>Building your grocery list…</strong><span>MealRoute is combining ingredients from My Plan and restoring your saved checkmarks.</span></div>;
   }
 
   return <>

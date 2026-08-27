@@ -9,12 +9,12 @@ import {
   type CalculationSex,
   type Goal,
 } from "../../lib/calorie-goal";
-import type { NutriPathProfile } from "../../lib/profile";
+import type { MealRouteProfile } from "../../lib/profile";
 import { createClient } from "../../lib/supabase/client";
 
 const totalSteps = 8;
 
-export default function OnboardingWizard({ userId, initialProfile }: { userId: string; initialProfile: NutriPathProfile | null }) {
+export default function OnboardingWizard({ userId, initialProfile }: { userId: string; initialProfile: MealRouteProfile | null }) {
   const imperialHeight = cmToImperial(initialProfile?.height_cm || null);
   const [step, setStep] = useState(Math.min(7, Math.max(0, initialProfile?.onboarding_step || 0)));
   const [name, setName] = useState(initialProfile?.name || "");
@@ -138,7 +138,7 @@ export default function OnboardingWizard({ userId, initialProfile }: { userId: s
   return (
     <main className="onboarding-page">
       <section className="onboarding-card">
-        <div className="auth-brand"><span>NP</span><div><strong>NutriPath</strong><small>Set up your nutrition path</small></div></div>
+        <div className="auth-brand"><span>MR</span><div><strong>MealRoute</strong><small>Set up your meal route</small></div></div>
         <div className="onboarding-progress" aria-label={`Step ${step + 1} of ${totalSteps}`}>
           <i style={{ width: `${((step + 1) / totalSteps) * 100}%` }} />
         </div>
@@ -152,13 +152,13 @@ export default function OnboardingWizard({ userId, initialProfile }: { userId: s
 
         {step === 3 && <div className="onboarding-question"><h1>What’s your primary goal?</h1><p>This adjusts your suggested daily calorie target.</p><div className="choice-list">{(Object.keys(goalLabels) as Goal[]).map(value => <button key={value} className={goal === value ? "active" : ""} onClick={() => setGoal(value)}><strong>{goalLabels[value]}</strong></button>)}</div></div>}
 
-        {step === 4 && <div className="onboarding-question"><h1>How old are you?</h1><p>NutriPath currently calculates targets for adults aged 18 and older.</p><label><span>Age</span><input autoFocus type="number" inputMode="numeric" min="18" max="100" value={age} onChange={event => setAge(event.target.value)} /></label></div>}
+        {step === 4 && <div className="onboarding-question"><h1>How old are you?</h1><p>MealRoute currently calculates targets for adults aged 18 and older.</p><label><span>Age</span><input autoFocus type="number" inputMode="numeric" min="18" max="100" value={age} onChange={event => setAge(event.target.value)} /></label></div>}
 
         {step === 5 && <div className="onboarding-question"><h1>Which sex should the calorie formula use?</h1><p>The Mifflin–St Jeor formula uses this value when estimating resting energy needs.</p><div className="choice-list two"><button className={sex === "female" ? "active" : ""} onClick={() => setSex("female")}><strong>Female</strong></button><button className={sex === "male" ? "active" : ""} onClick={() => setSex("male")}><strong>Male</strong></button></div></div>}
 
         {step === 6 && <div className="onboarding-question"><h1>What’s your activity level?</h1><p>Choose the option that best describes a typical week.</p><div className="choice-list activity"><button className={activity === "sedentary" ? "active" : ""} onClick={() => setActivity("sedentary")}><strong>Sedentary</strong><span>Mostly seated, little planned exercise</span></button><button className={activity === "light" ? "active" : ""} onClick={() => setActivity("light")}><strong>Lightly Active</strong><span>Light exercise 1–3 days per week</span></button><button className={activity === "moderate" ? "active" : ""} onClick={() => setActivity("moderate")}><strong>Moderately Active</strong><span>Moderate exercise 3–5 days per week</span></button><button className={activity === "very" ? "active" : ""} onClick={() => setActivity("very")}><strong>Very Active</strong><span>Hard exercise 6–7 days per week</span></button><button className={activity === "extra" ? "active" : ""} onClick={() => setActivity("extra")}><strong>Extra Active</strong><span>Very hard training or a physical job</span></button></div></div>}
 
-        {step === 7 && <div className="onboarding-question"><h1>Set your daily calorie goal</h1><p>NutriPath calculated a starting estimate from your confirmed details.</p><div className="calorie-suggestion"><span>Suggested target</span><strong>{suggested.toLocaleString()} kcal</strong><small>Mifflin–St Jeor resting-energy estimate, activity factor and goal adjustment</small></div><label><span>Your daily goal (kcal)</span><input autoFocus type="number" inputMode="numeric" min="1200" max="6000" step="10" value={calorieGoal || suggested || ""} onChange={event => setCalorieGoal(event.target.value)} /></label><div className="safety-note"><strong>This is an estimate.</strong><span>It is for general planning, not medical advice. If you are pregnant, breastfeeding, have a medical condition or have an eating-disorder history, ask a qualified health professional before using a calorie deficit.</span></div></div>}
+        {step === 7 && <div className="onboarding-question"><h1>Set your daily calorie goal</h1><p>MealRoute calculated a starting estimate from your confirmed details.</p><div className="calorie-suggestion"><span>Suggested target</span><strong>{suggested.toLocaleString()} kcal</strong><small>Mifflin–St Jeor resting-energy estimate, activity factor and goal adjustment</small></div><label><span>Your daily goal (kcal)</span><input autoFocus type="number" inputMode="numeric" min="1200" max="6000" step="10" value={calorieGoal || suggested || ""} onChange={event => setCalorieGoal(event.target.value)} /></label><div className="safety-note"><strong>This is an estimate.</strong><span>It is for general planning, not medical advice. If you are pregnant, breastfeeding, have a medical condition or have an eating-disorder history, ask a qualified health professional before using a calorie deficit.</span></div></div>}
 
         {error && <div className="auth-error" role="alert">{error}</div>}
         <div className="onboarding-actions">

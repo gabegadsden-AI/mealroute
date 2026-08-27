@@ -33,7 +33,7 @@ export default function NotFound() {
           textDecoration: "none",
         }}
       >
-        Back to NutriPath
+        Back to MealRoute
       </Link>
     </div>
   );

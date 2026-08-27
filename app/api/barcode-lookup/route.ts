@@ -48,7 +48,7 @@ export async function POST(request: Request) {
 
     const offUrl = `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=${fields}`;
     const offRes = await fetch(offUrl, {
-      headers: { "User-Agent": "NutriPath/1.0 (web app)" },
+      headers: { "User-Agent": "MealRoute/1.0 (web app)" },
       signal: AbortSignal.timeout(10000),
     });
 

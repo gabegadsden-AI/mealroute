@@ -1,4 +1,4 @@
-import type { NutriPathProfile } from "./profile";
+import type { MealRouteProfile } from "./profile";
 
 export type MacroTargets = {
   protein: number;
@@ -6,7 +6,7 @@ export type MacroTargets = {
   fat: number;
 };
 
-type Goal = NonNullable<NutriPathProfile["primary_goal"]>;
+type Goal = NonNullable<MealRouteProfile["primary_goal"]>;
 
 const macroRatios: Record<Goal, { protein: number; carbs: number; fat: number }> = {
   lose_weight: { protein: 0.30, carbs: 0.45, fat: 0.25 },
@@ -21,7 +21,7 @@ export function macroCalories(targets: MacroTargets) {
 
 export function suggestedMacroTargets(
   calorieGoal: number,
-  goal: NutriPathProfile["primary_goal"],
+  goal: MealRouteProfile["primary_goal"],
 ): MacroTargets {
   const safeCalories = Math.min(6000, Math.max(1200, Math.round(Number(calorieGoal) || 2000)));
   const ratios = macroRatios[goal || "eat_healthier"];

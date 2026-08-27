@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Legal — NutriPath",
-  description: "Terms of Service and Privacy Policy for NutriPath.",
+  title: "Legal — MealRoute",
+  description: "Terms of Service and Privacy Policy for MealRoute.",
 };
 
 const styles = {
@@ -116,32 +116,32 @@ export default function LegalPage() {
         <div style={styles.header}>
           <div style={styles.logo}>NP</div>
           <div>
-            <p style={styles.brand}>NutriPath</p>
-            <p style={styles.tagline}>Plan better. Track smarter.</p>
+            <p style={styles.brand}>MealRoute</p>
+            <p style={styles.tagline}>Plan your meals. Track your way.</p>
           </div>
         </div>
 
         <p style={styles.eyebrow}>LEGAL</p>
         <h1 style={styles.title}>Legal Documents</h1>
-        <p style={styles.subtitle}>The policies that govern your use of NutriPath.</p>
+        <p style={styles.subtitle}>The policies that govern your use of MealRoute.</p>
 
         <a href="/terms" style={styles.card}>
           <p style={styles.cardTitle}>Terms of Service</p>
-          <p style={styles.cardDesc}>The rules and expectations for using NutriPath, including our nutritional disclaimer and AI content policy.</p>
+          <p style={styles.cardDesc}>The rules and expectations for using MealRoute, including our nutritional disclaimer and AI content policy.</p>
           <span style={styles.arrow}>Read Terms →</span>
         </a>
 
         <a href="/privacy" style={styles.card}>
           <p style={styles.cardTitle}>Privacy Policy</p>
-          <p style={styles.cardDesc}>How NutriPath collects, uses, stores, and protects your personal and nutrition data.</p>
+          <p style={styles.cardDesc}>How MealRoute collects, uses, stores, and protects your personal and nutrition data.</p>
           <span style={styles.arrow}>Read Policy →</span>
         </a>
 
         <div style={styles.footer}>
           <p>
-            <a href="/" style={styles.footerLink}>← Back to NutriPath</a>
+            <a href="/" style={styles.footerLink}>← Back to MealRoute</a>
           </p>
-          <p style={{ marginTop: "8px" }}>© 2026 NutriPath. All rights reserved.</p>
+          <p style={{ marginTop: "8px" }}>© 2026 MealRoute. All rights reserved.</p>
         </div>
       </div>
     </div>

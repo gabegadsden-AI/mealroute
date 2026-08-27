@@ -7,10 +7,10 @@ export default function LandingPage() {
       {/* NAV */}
       <nav className="landing-nav">
         <div className="landing-brand">
-          <span className="brandmark">NP</span>
+          <span className="brandmark">MR</span>
           <div>
-            <strong>NutriPath</strong>
-            <small>Plan better. Track smarter.</small>
+            <strong>MealRoute</strong>
+            <small>Plan your meals. Track your way.</small>
           </div>
         </div>
         <div className="landing-nav-links">
@@ -28,7 +28,7 @@ export default function LandingPage() {
           <span className="landing-badge">AI-Powered Nutrition Planning</span>
           <h1>Stop guessing.<br />Start planning.</h1>
           <p className="landing-hero-sub">
-            NutriPath uses AI to build meal plans from the foods you already love.
+            MealRoute uses AI to build meal plans from the foods you already love.
             Snap a photo to log meals, scan barcodes for packaged foods, and get
             grocery lists automatically — all in one clean app.
           </p>
@@ -41,8 +41,8 @@ export default function LandingPage() {
         <div className="landing-hero-visual">
           <div className="landing-phone-mockup">
             <div className="mockup-topbar">
-              <span className="mockup-brandmark">NP</span>
-              <div><strong>NutriPath</strong><small>Today</small></div>
+              <span className="mockup-brandmark">MR</span>
+              <div><strong>MealRoute</strong><small>Today</small></div>
               <div className="mockup-avatar">GG</div>
             </div>
             <div className="mockup-ring">
@@ -91,7 +91,7 @@ export default function LandingPage() {
           <div className="feature-card">
             <span className="feature-icon">▣</span>
             <h3>Photo Food Logging</h3>
-            <p>Snap a photo of your meal. NutriPath identifies the food, estimates portions, and calculates nutrition automatically.</p>
+            <p>Snap a photo of your meal. MealRoute identifies the food, estimates portions, and calculates nutrition automatically.</p>
           </div>
           <div className="feature-card">
             <span className="feature-icon">⌕</span>
@@ -157,7 +157,7 @@ export default function LandingPage() {
           <div className="who-card">
             <span className="who-icon">🌱</span>
             <h3>Everyday eaters</h3>
-            <p>Want to eat better without obsessing? NutriPath makes nutrition tracking simple, visual, and actually sustainable.</p>
+            <p>Want to eat better without obsessing? MealRoute makes nutrition tracking simple, visual, and actually sustainable.</p>
           </div>
         </div>
       </section>
@@ -168,7 +168,7 @@ export default function LandingPage() {
           <h2>Ready to eat smarter?</h2>
           <p>Create your free account and build your first AI meal plan in minutes.</p>
           <Link href="/auth/signup" className="landing-cta-primary big">Get started — it&apos;s free</Link>
-          <p className="landing-disclaimer">Nutrition values are estimates and not guaranteed. NutriPath is not a substitute for professional medical or dietary advice.</p>
+          <p className="landing-disclaimer">Nutrition values are estimates and not guaranteed. MealRoute is not a substitute for professional medical or dietary advice.</p>
         </div>
       </section>
 
@@ -176,10 +176,10 @@ export default function LandingPage() {
       <footer className="landing-footer">
         <div className="landing-footer-content">
           <div className="landing-brand">
-            <span className="brandmark">NP</span>
+            <span className="brandmark">MR</span>
             <div>
-              <strong>NutriPath</strong>
-              <small>Plan better. Track smarter.</small>
+              <strong>MealRoute</strong>
+              <small>Plan your meals. Track your way.</small>
             </div>
           </div>
           <div className="landing-footer-links">
@@ -188,7 +188,7 @@ export default function LandingPage() {
             <a href="#features">Features</a>
             <a href="#how">How it works</a>
           </div>
-          <p className="landing-footer-text">© 2026 NutriPath. All rights reserved. Nutrition values are estimates and not guaranteed.</p>
+          <p className="landing-footer-text">© 2026 MealRoute. All rights reserved. Nutrition values are estimates and not guaranteed.</p>
         </div>
       </footer>
     </main>

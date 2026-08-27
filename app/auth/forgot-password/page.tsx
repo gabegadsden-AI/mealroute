@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <div className="auth-brand"><span>NP</span><div><strong>NutriPath</strong><small>Plan better. Track smarter.</small></div></div>
+        <div className="auth-brand"><span>MR</span><div><strong>MealRoute</strong><small>Plan your meals. Track your way.</small></div></div>
         <p className="eyebrow">PASSWORD RESET</p>
         <h1>{sent ? "Check your email" : "Reset your password"}</h1>
         {sent ? (

@@ -304,7 +304,7 @@ export default function BarcodeScanner({ savedProducts, onSaveProduct, onAdd }: 
     return <div className="manual-food-editor">
       <p className="eyebrow">BARCODE SCAN</p>
       <h2>Scan a packaged food</h2>
-      <p className="modal-sub">Point your camera at a product barcode. NutriPath will look up the nutrition label and let you verify the values before logging.</p>
+      <p className="modal-sub">Point your camera at a product barcode. MealRoute will look up the nutrition label and let you verify the values before logging.</p>
 
       {cameraSupported && !manualEntry && (
         <div className="barcode-camera-frame">

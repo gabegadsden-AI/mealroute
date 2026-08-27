@@ -1,4 +1,4 @@
-// NutriPath Footer with Legal Links
+// MealRoute Footer with Legal Links
 // Add this component to your app, then place <LegalFooter /> 
 // right before the closing </main> tag in page.tsx
 //
@@ -14,7 +14,7 @@ export default function LegalFooter() {
       borderTop: "1px solid #1c2620",
       marginTop: "auto",
     }}>
-      <span>© 2026 NutriPath · </span>
+      <span>© 2026 MealRoute · </span>
       <a href="/terms" style={{ color: "#8e9a91", textDecoration: "none" }}>Terms</a>
       <span> · </span>
       <a href="/privacy" style={{ color: "#8e9a91", textDecoration: "none" }}>Privacy</a>
