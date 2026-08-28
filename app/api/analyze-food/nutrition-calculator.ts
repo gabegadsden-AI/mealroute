@@ -1,4 +1,10 @@
 import "server-only";
+import {
+  type Micronutrients,
+  EMPTY_MICRONUTRIENTS,
+  extractUSDAMicronutrients,
+  scaleMicronutrients,
+} from "../../../lib/micronutrients";
 
 export type LabelNutritionPer100g = {
   productName: string;
@@ -23,6 +29,7 @@ export type CalculatedIngredient = ConfirmedIngredient & {
   carbs: number;
   fat: number;
   fibre: number;
+  micros: Micronutrients;
   nutritionSource: string;
   calculationSource: "nutrition_label" | "usda";
   fdcId?: number;
@@ -36,6 +43,7 @@ type Per100gFood = {
   carbs: number;
   fat: number;
   fibre: number;
+  micros: Micronutrients;
   matches: (normalizedName: string) => boolean;
 };
 
@@ -51,15 +59,16 @@ type FdcFood = {
 
 export type FoodSearchResult = {
   sourceKey: string;
-  sourceType: "usda";
+  sourceType: "usda" | "off";
   name: string;
   brandName?: string;
-  fdcId: number;
+  fdcId?: number;
   caloriesPer100g: number;
   proteinPer100g: number;
   carbsPer100g: number;
   fatPer100g: number;
   fibrePer100g: number;
+  micros?: Micronutrients;
   nutritionSource: string;
   dataType: string;
 };
@@ -69,12 +78,12 @@ const has = (value: string, terms: string[]) => terms.some(term => value.include
 const round1 = (value: number) => Math.round((value + Number.EPSILON) * 10) / 10;
 
 const verifiedFoods: Per100gFood[] = [
-  { description: "Rice, brown, long-grain, cooked", fdcId: 169704, calories: 123, protein: 2.74, carbs: 25.58, fat: 0.97, fibre: 1.6, matches: name => has(name, ["brown rice", "rice brown"]) && has(name, ["cooked", "boiled"]) },
-  { description: "Chicken, broilers or fryers, breast, meat only, cooked, grilled", fdcId: 171477, calories: 165, protein: 31.02, carbs: 0, fat: 3.57, fibre: 0, matches: name => has(name, ["chicken breast", "breast chicken"]) && !has(name, ["skin on", "with skin", "fried", "breaded"]) },
-  { description: "Cabbage, cooked, boiled, drained, without salt", fdcId: 169976, calories: 23, protein: 1.27, carbs: 5.51, fat: 0.06, fibre: 1.9, matches: name => name.includes("cabbage") && has(name, ["cooked", "boiled", "steamed"]) },
-  { description: "Bananas, raw", fdcId: 173944, calories: 89, protein: 1.09, carbs: 22.84, fat: 0.33, fibre: 2.6, matches: name => name.includes("banana") && !has(name, ["bread", "chips", "fried"]) },
-  { description: "Lentils, mature seeds, cooked, boiled, without salt", fdcId: 172421, calories: 116, protein: 9.02, carbs: 20.13, fat: 0.38, fibre: 7.9, matches: name => /\blentils?\b/.test(name) && !has(name, ["dry", "raw", "sprouted", "with salt", "salted"]) },
-  { description: "Lentils, mature seeds, cooked, boiled, with salt", fdcId: 175254, calories: 114, protein: 9.02, carbs: 19.54, fat: 0.38, fibre: 7.9, matches: name => /\blentils?\b/.test(name) && has(name, ["with salt", "salted"]) },
+  { description: "Rice, brown, long-grain, cooked", fdcId: 169704, calories: 123, protein: 2.74, carbs: 25.58, fat: 0.97, fibre: 1.6, micros: EMPTY_MICRONUTRIENTS, matches: name => has(name, ["brown rice", "rice brown"]) && has(name, ["cooked", "boiled"]) },
+  { description: "Chicken, broilers or fryers, breast, meat only, cooked, grilled", fdcId: 171477, calories: 165, protein: 31.02, carbs: 0, fat: 3.57, fibre: 0, micros: EMPTY_MICRONUTRIENTS, matches: name => has(name, ["chicken breast", "breast chicken"]) && !has(name, ["skin on", "with skin", "fried", "breaded"]) },
+  { description: "Cabbage, cooked, boiled, drained, without salt", fdcId: 169976, calories: 23, protein: 1.27, carbs: 5.51, fat: 0.06, fibre: 1.9, micros: EMPTY_MICRONUTRIENTS, matches: name => name.includes("cabbage") && has(name, ["cooked", "boiled", "steamed"]) },
+  { description: "Bananas, raw", fdcId: 173944, calories: 89, protein: 1.09, carbs: 22.84, fat: 0.33, fibre: 2.6, micros: EMPTY_MICRONUTRIENTS, matches: name => name.includes("banana") && !has(name, ["bread", "chips", "fried"]) },
+  { description: "Lentils, mature seeds, cooked, boiled, without salt", fdcId: 172421, calories: 116, protein: 9.02, carbs: 20.13, fat: 0.38, fibre: 7.9, micros: EMPTY_MICRONUTRIENTS, matches: name => /\blentils?\b/.test(name) && !has(name, ["dry", "raw", "sprouted", "with salt", "salted"]) },
+  { description: "Lentils, mature seeds, cooked, boiled, with salt", fdcId: 175254, calories: 114, protein: 9.02, carbs: 19.54, fat: 0.38, fibre: 7.9, micros: EMPTY_MICRONUTRIENTS, matches: name => /\blentils?\b/.test(name) && has(name, ["with salt", "salted"]) },
 ];
 
 function nutrient(food: FdcFood, id: number) {
@@ -97,10 +106,9 @@ function toPer100g(food: FdcFood): Per100gFood | null {
   const protein = nutrient(food, 1003);
   const carbs = nutrient(food, 1005);
   const fat = nutrient(food, 1004);
-  // USDA Foundation records may publish energy under Atwater-specific (2048)
-  // or Atwater-general (2047) identifiers instead of legacy Energy (1008).
   const reportedCalories = nutrientAny(food, [1008, 2048, 2047]);
   const macroCalories = protein * 4 + carbs * 4 + fat * 9;
+  const micros = extractUSDAMicronutrients(food.foodNutrients || []);
   const result: Per100gFood = {
     description: String(food.description || "USDA food"),
     fdcId: Math.round(fdcId),
@@ -109,6 +117,7 @@ function toPer100g(food: FdcFood): Per100gFood | null {
     carbs,
     fat,
     fibre: nutrient(food, 1079),
+    micros,
     matches: () => false,
   };
   return result.calories > 0 || result.protein > 0 || result.carbs > 0 || result.fat > 0 ? result : null;
@@ -216,6 +225,7 @@ export async function searchFoodDataCentralFoods(
         carbsPer100g: round1(nutrition.carbs),
         fatPer100g: round1(nutrition.fat),
         fibrePer100g: round1(nutrition.fibre),
+        micros: nutrition.micros,
         nutritionSource: `USDA FoodData Central · ${description}`,
         dataType: String(food.dataType || "USDA"),
       };
@@ -254,6 +264,7 @@ function calculateFromLabel(ingredient: ConfirmedIngredient): CalculatedIngredie
     carbs: round1(label.carbs * ratio),
     fat: round1(label.fat * ratio),
     fibre: round1(label.fibre * ratio),
+    micros: EMPTY_MICRONUTRIENTS,
     nutritionSource: `Nutrition label · ${label.productName || ingredient.name}`,
     calculationSource: "nutrition_label",
   };
@@ -277,6 +288,7 @@ export async function calculateVerifiedIngredients(ingredients: ConfirmedIngredi
       carbs: round1(food.carbs * ratio),
       fat: round1(food.fat * ratio),
       fibre: round1(food.fibre * ratio),
+      micros: scaleMicronutrients(food.micros, ingredient.amountGrams),
       nutritionSource: `USDA FoodData Central · ${food.description}`,
       calculationSource: "usda",
     });

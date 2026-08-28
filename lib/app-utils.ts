@@ -1,4 +1,5 @@
 import { type PlannedIngredient } from "./grocery-list";
+import { type Micronutrients, EMPTY_MICRONUTRIENTS, addMicronutrients } from "./micronutrients";
 import { type MealRouteProfile } from "./profile";
 import {
   isDateKey,
@@ -10,11 +11,11 @@ import {
 
 export type Tab = "today" | "plan" | "log" | "grocery" | "progress";
 export type PlanSubView = "week" | "palette" | "review";
-export type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string; ingredients?: PlannedIngredient[]; plannedDate?: string; mealSlot?: MealSlot };
+export type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string; ingredients?: PlannedIngredient[]; plannedDate?: string; mealSlot?: MealSlot; micros?: Micronutrients };
 export type LabelNutrition = { productName: string; energyValue: number; energyUnit: "kcal" | "kJ"; carbs: number; protein: number; fat: number; fibre: number };
 export type SavedPackagedProduct = LabelNutrition & { id: string; updatedAt: number };
 export type LabelNutritionDraft = Omit<LabelNutrition, "energyValue" | "carbs" | "protein" | "fat" | "fibre"> & { energyValue: number | ""; carbs: number | ""; protein: number | ""; fat: number | ""; fibre: number | "" };
-export type AnalysisIngredient = { name: string; amountGrams: number; calories: number; protein: number; carbs: number; fat: number; fibre: number; nutritionSource?: string; calculationSource?: "nutrition_label" | "usda"; fdcId?: number; labelNutrition?: LabelNutrition };
+export type AnalysisIngredient = { name: string; amountGrams: number; calories: number; protein: number; carbs: number; fat: number; fibre: number; nutritionSource?: string; calculationSource?: "nutrition_label" | "usda"; fdcId?: number; labelNutrition?: LabelNutrition; micros?: Micronutrients };
 export type FoodAnalysis = {
   mealName: string;
   calories: { low: number; high: number; best: number };
@@ -119,6 +120,7 @@ export function normalizeStoredMeal(raw: any): Meal | null {
     ingredients: normalizeStoredIngredients(raw.ingredients),
     plannedDate: isDateKey(raw.plannedDate) ? raw.plannedDate : undefined,
     mealSlot: normalizeMealSlot(raw.mealSlot),
+    micros: raw.micros && typeof raw.micros === "object" ? raw.micros as Micronutrients : undefined,
   };
 }
 
@@ -231,8 +233,9 @@ export function mealTotals(meals: Meal[]) {
     protein: totals.protein + meal.protein,
     carbs: totals.carbs + meal.carbs,
     fat: totals.fat + meal.fat,
+    micros: addMicronutrients(totals.micros, meal.micros || EMPTY_MICRONUTRIENTS),
     count: totals.count + 1,
-  }), { calories: 0, protein: 0, carbs: 0, fat: 0, count: 0 });
+  }), { calories: 0, protein: 0, carbs: 0, fat: 0, micros: { ...EMPTY_MICRONUTRIENTS }, count: 0 });
 }
 
 export function normalizeLabel(raw: any): LabelNutrition | undefined {

@@ -2,8 +2,11 @@
 import { useEffect, useState } from "react";
 import { localDateKey, dateFromKey, type Meal } from "../../lib/app-utils";
 import { type MealSlot, mealSlots, mealSlotLabels } from "../../lib/weekly-plan";
+import { type Micronutrients, MICRONUTRIENT_LABELS, MICRONUTRIENT_UNITS, MICRONUTRIENT_DV, MICRONUTRIENT_KEYS, hasMicronutrientData } from "../../lib/micronutrients";
 
-export function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onBarcode }: any) {
+const TOP_MICROS: (keyof Micronutrients)[] = ["calcium", "iron", "vitaminC", "vitaminD", "potassium", "sodium"];
+
+export function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onBarcode, micros }: any) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const dates = today ? Array.from({ length: 7 }, (_, index) => {
@@ -12,8 +15,9 @@ export function Today({ meals, selectedDate, onSelectDate, consumed, protein, ca
     return date;
   }) : [];
   const selectedLabel = selectedDate
-    ? selectedDate === (today ? localDateKey(today) : "") ? "Today’s meals" : `${dateFromKey(selectedDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" })} meals`
-    : "Today’s meals";
+    ? selectedDate === (today ? localDateKey(today) : "") ? "Today's meals" : `${dateFromKey(selectedDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" })} meals`
+    : "Today's meals";
+  const showMicros = hasMicronutrientData(micros as Micronutrients | undefined);
   return <>
     <section className="daily-overview">
       <div className="today-date-strip">
@@ -35,18 +39,34 @@ export function Today({ meals, selectedDate, onSelectDate, consumed, protein, ca
         <MacroGoal kind="protein" label="Protein" value={protein} goal={macroTargets.protein} />
         <MacroGoal kind="fat" label="Fat" value={fat} goal={macroTargets.fat} />
       </div>
-      <div className="overview-actions"><button className="scan-meal" onClick={onLog}><span>＋</span><b>Scan or log meal</b></button><button className="scan-barcode" onClick={onBarcode}><span>▣</span><b>Scan barcode</b></button><button onClick={onWater} aria-label={`Water: ${water} of ${waterGoal} millilitres`}><span>♢</span><b>{(water / 1000).toFixed(1)} / {(waterGoal / 1000).toFixed(1)}L</b></button></div>
+      {showMicros && <MicronutrientGrid micros={micros} />}
+      <div className="overview-actions"><button className="scan-meal" onClick={onLog}><span>+</span><b>Scan or log meal</b></button><button className="scan-barcode" onClick={onBarcode}><span>▣</span><b>Scan barcode</b></button><button onClick={onWater} aria-label={`Water: ${water} of ${waterGoal} millilitres`}><span>♢</span><b>{(water / 1000).toFixed(1)} / {(waterGoal / 1000).toFixed(1)}L</b></button></div>
     </section>
 
     <section className="section-block">
       <div className="section-heading history-heading"><div><p className="eyebrow">MEAL HISTORY</p><h2>{selectedLabel}</h2></div><input className="history-date-picker" aria-label="Choose meal history date" type="date" value={selectedDate} max={today ? localDateKey(today) : undefined} onChange={event => { if (event.target.value) onSelectDate(event.target.value); }} /></div>
       {meals.length > 0
         ? <><span className="history-count">{meals.filter((m: Meal) => m.eaten).length} of {meals.length} complete</span><div className="meal-list">{meals.map((meal: Meal) => <MealCard key={meal.id} meal={meal} onMeal={onMeal} />)}</div></>
-        : <div className="history-empty"><strong>No meals logged for this date.</strong><span>Select another day or log a meal for today.</span><button onClick={onLog}>Log today’s meal</button></div>}
+        : <div className="history-empty"><strong>No meals logged for this date.</strong><span>Select another day or log a meal for today.</span><button onClick={onLog}>Log today's meal</button></div>}
     </section>
 
-    <section className="insight-card"><div className="spark">✦</div><div><p className="eyebrow">TODAY’S INSIGHT</p><strong>You have {Math.max(0, Math.round(macroTargets.protein - protein))}g of protein remaining.</strong><p>Your planned meals can help close the gap.</p></div></section>
+    <section className="insight-card"><div className="spark">✦</div><div><p className="eyebrow">TODAY'S INSIGHT</p><strong>You have {Math.max(0, Math.round(macroTargets.protein - protein))}g of protein remaining.</strong><p>Your planned meals can help close the gap.</p></div></section>
   </>;
+}
+
+function MicronutrientGrid({ micros }: { micros: Micronutrients }) {
+  return <div className="micro-grid">
+    {TOP_MICROS.map(key => {
+      const value = micros[key] || 0;
+      const dv = MICRONUTRIENT_DV[key];
+      const pct = dv > 0 ? Math.min(100, Math.round((value / dv) * 100)) : 0;
+      return <div className="micro-tile" key={key}>
+        <span>{MICRONUTRIENT_LABELS[key]}</span>
+        <i><b style={{ width: `${pct}%` }} /></i>
+        <strong>{value < 1 ? value.toFixed(1) : Math.round(value)}<small>{MICRONUTRIENT_UNITS[key]}</small></strong>
+      </div>;
+    })}
+  </div>;
 }
 
 export function MacroGoal({ kind, label, value, goal }: { kind: string; label: string; value: number; goal: number }) {

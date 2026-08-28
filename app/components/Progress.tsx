@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { localDateKey, mealTotals, dateFromKey, type MealHistory, type WeightSaveResult } from "../../lib/app-utils";
+import { type Micronutrients, MICRONUTRIENT_KEYS, MICRONUTRIENT_LABELS, MICRONUTRIENT_UNITS, MICRONUTRIENT_DV, EMPTY_MICRONUTRIENTS, addMicronutrients, hasMicronutrientData } from "../../lib/micronutrients";
 import { type WeightLog, weightInUnit, weightToKg } from "../../lib/weight-progress";
 import { type MealRouteProfile } from "../../lib/profile";
 import { type ManualFoodItem, calculateManualNutrition, customFoodKey, packagedProductFood } from "../../lib/manual-food";
@@ -28,6 +29,7 @@ export function Progress({
   onLogWeight: () => void;
 }) {
   const [today, setToday] = useState<Date | null>(null);
+  const [showAllMicros, setShowAllMicros] = useState(false);
   useEffect(() => setToday(new Date()), []);
   const rangeDays = range === "Week" ? 7 : range === "Month" ? 30 : 90;
   const periodDates = today ? Array.from({ length: rangeDays }, (_, index) => {
@@ -41,6 +43,15 @@ export function Progress({
   const averageCalories = trackedDays.length ? Math.round(totalCalories / trackedDays.length) : 0;
   const proteinTargetDays = trackedDays.filter(day => day.protein >= proteinTarget).length;
   const loggedMeals = trackedDays.reduce((sum, day) => sum + day.count, 0);
+  const periodMicros = trackedDays.reduce((acc, day) => {
+    const dayMicros = (day as any).micros as Micronutrients | undefined;
+    return dayMicros ? addMicronutrients(acc, dayMicros) : acc;
+  }, { ...EMPTY_MICRONUTRIENTS });
+  const avgMicros: Micronutrients = trackedDays.length
+    ? MICRONUTRIENT_KEYS.reduce((acc, key) => ({ ...acc, [key]: Math.round((periodMicros[key] / trackedDays.length) * 10) / 10 }), { ...EMPTY_MICRONUTRIENTS })
+    : { ...EMPTY_MICRONUTRIENTS };
+  const hasMicroData = hasMicronutrientData(avgMicros);
+  const displayMicroKeys = showAllMicros ? MICRONUTRIENT_KEYS : MICRONUTRIENT_KEYS.slice(0, 6);
   const chartDays = periodTotals.slice(-7).map(day => ({
     key: day.date,
     day: dateFromKey(day.date).toLocaleDateString([], { weekday: "short" }),
@@ -91,6 +102,28 @@ export function Progress({
         </>
         : <div className="weight-empty"><span>Log a measurement to start your private weight history.</span><small>MealRoute stores it under your signed-in account.</small></div>}
     </section>
+
+    {hasMicroData && <section className="section-block">
+      <div className="section-heading">
+        <div><p className="eyebrow">MICRONUTRIENTS</p><h2>Vitamins &amp; Minerals</h2></div>
+        <button onClick={() => setShowAllMicros(!showAllMicros)}>{showAllMicros ? "Show top 6" : "Show all 17"}</button>
+      </div>
+      <div className="micro-list">
+        {displayMicroKeys.map(key => {
+          const value = avgMicros[key];
+          const dv = MICRONUTRIENT_DV[key];
+          const pctDV = dv > 0 ? Math.round((value / dv) * 100) : 0;
+          const barClass = pctDV >= 100 ? "good" : pctDV >= 50 ? "good" : pctDV >= 25 ? "low" : "very-low";
+          return <div className="micro-row" key={key}>
+            <span className="micro-label">{MICRONUTRIENT_LABELS[key]}</span>
+            <span className="micro-value">{value < 1 ? value.toFixed(1) : Math.round(value)}{MICRONUTRIENT_UNITS[key]}</span>
+            <span className="micro-dv">{pctDV}% DV</span>
+            <i className="micro-bar"><b className={barClass} style={{ width: `${Math.min(100, pctDV)}%` }} /></i>
+          </div>;
+        })}
+      </div>
+      <p style={{ color: "var(--muted)", fontSize: "8px", marginTop: "8px" }}>Daily averages from {trackedDays.length} tracked {trackedDays.length === 1 ? "day" : "days"}. DV = FDA Daily Value.</p>
+    </section>}
   </>;
 }
 

@@ -185,6 +185,7 @@ export default function Home() {
   const protein = totals.protein;
   const carbs = totals.carbs;
   const fat = totals.fat;
+  const micros = totals.micros;
   const water = selectedDate ? waterHistory[selectedDate]?.amount_ml || 0 : 0;
   const waterGoal = Number(profile?.water_goal_ml || DEFAULT_WATER_GOAL_ML);
   const target = Number(profile?.calorie_goal || profile?.suggested_calorie_goal || 1850);
@@ -1121,7 +1122,7 @@ export default function Home() {
                 onOpenGoals={() => setModal("goals")}
               />
 
-              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} onBarcode={() => setModal("barcode")} />}
+              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} onBarcode={() => setModal("barcode")} micros={micros} />}
               {tab === "plan" && (
                 <>
                   <div className="plan-sub-nav" style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>

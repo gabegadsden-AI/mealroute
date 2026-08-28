@@ -1,4 +1,5 @@
 import { createClient } from "../../../lib/supabase/server";
+import { type Micronutrients, extractOFFMicronutrients } from "../../../lib/micronutrients";
 
 type BarcodeLookupResponse = {
   found: boolean;
@@ -11,6 +12,7 @@ type BarcodeLookupResponse = {
   protein?: number;        // per 100g
   fat?: number;            // per 100g
   fibre?: number;          // per 100g
+  micros?: Micronutrients; // per 100g
   source?: string;
   error?: string;
 };
@@ -71,6 +73,7 @@ export async function POST(request: Request) {
 
     const productName = String(product.product_name || product.product_name_en || "").trim();
     const brandName = String(product.brands || "").trim();
+    const micros = extractOFFMicronutrients(nutriments);
 
     // Open Food Facts stores energy in kJ by default; some products also have kcal
     const energyKcal = num(nutriments["energy-kcal_100g"] ?? nutriments["energy-kcal"] ?? 0);
@@ -99,6 +102,7 @@ export async function POST(request: Request) {
         protein: num(nutriments.proteins_100g ?? 0),
         fat: num(nutriments.fat_100g ?? 0),
         fibre: num(nutriments.fiber_100g ?? nutriments.fibre_100g ?? 0),
+        micros,
         source: "Open Food Facts",
         error: "No calorie data on Open Food Facts — please enter the values from the package label.",
       } satisfies BarcodeLookupResponse);
@@ -115,6 +119,7 @@ export async function POST(request: Request) {
       protein: Math.round(num(nutriments.proteins_100g ?? 0) * 10) / 10,
       fat: Math.round(num(nutriments.fat_100g ?? 0) * 10) / 10,
       fibre: Math.round(num(nutriments.fiber_100g ?? nutriments.fibre_100g ?? 0) * 10) / 10,
+      micros,
       source: "Open Food Facts",
     } satisfies BarcodeLookupResponse, {
       headers: { "Cache-Control": "private, no-store" },
