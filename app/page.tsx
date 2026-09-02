@@ -93,6 +93,7 @@ import PlanReview, { type PlanMeal, type GeneratedPlan } from "./components/Plan
 import { WeeklySummary } from "./components/WeeklySummary";
 import { RecipeCreator } from "./components/RecipeCreator";
 import { type Recipe } from "../lib/recipes";
+import { initAnalytics, identifyUser, resetUser, trackScreenView, trackEvent } from "../lib/analytics";
 
 import {
   localDateKey,
@@ -148,7 +149,8 @@ const navItems: { id: Tab; label: string; icon: string }[] = [
 ];
 
 export default function Home() {
-  const [tab, setTab] = useState<Tab>("today");
+  const [tab, setTabState] = useState<Tab>("today");
+  function setTab(next: Tab) { trackScreenView(next); setTabState(next); }
   const [profile, setProfile] = useState<MealRouteProfile | null>(null);
   const [userId, setUserId] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
@@ -264,6 +266,8 @@ export default function Home() {
 
       setProfile(loadedProfile);
       setUserId(userData.user.id);
+      initAnalytics();
+      identifyUser(userData.user.id, { signup_date: userData.user.created_at || "" });
       setSelectedDate(today);
       setPlanWeekStart(currentPlanWeek);
       setGroceryWeekStart(initialGroceryWeek);
@@ -403,6 +407,7 @@ export default function Home() {
   }
 
   async function handleGeneratePlan(days: number) {
+    trackEvent("plan_generate", { days });
     setGeneratingPlan(true);
     setPlanError("");
     try {
@@ -426,6 +431,7 @@ export default function Home() {
   }
 
   async function handleAcceptPlan(acceptedMeals?: PlanMeal[]) {
+    trackEvent("plan_accept", { meals: acceptedMeals?.length || 0 });
     if (!generatedPlan) return;
     const mealsToSave = acceptedMeals || generatedPlan.meals;
     const baseId = Date.now();
@@ -455,6 +461,7 @@ export default function Home() {
   }
 
   function handleRejectPlan() {
+    trackEvent("plan_reject");
     setGeneratedPlan(null);
     setPlanSubView("week");
     notify("Plan discarded. Try generating again with different foods.");
@@ -523,6 +530,7 @@ export default function Home() {
       } else {
         setShareUrl(data.shareUrl);
         notify("Share link created! 📋");
+        trackEvent("plan_share", { meals: plannedMeals.length });
       }
     } catch {
       notify("Could not create share link.");
@@ -532,6 +540,7 @@ export default function Home() {
   }
 
   function logRecipe(recipe: Recipe) {
+    trackEvent("recipe_log", { name: recipe.name });
     const today = localDateKey();
     const newMeal: Meal = {
       id: Date.now() + Math.floor(Math.random() * 1000),
@@ -829,6 +838,8 @@ export default function Home() {
   }
 
   async function logout() {
+    trackEvent("logout");
+    resetUser();
     if (loggingOut) return;
     setLoggingOut(true);
     const supabase = createClient();
@@ -874,6 +885,7 @@ export default function Home() {
   }
 
   async function logPlannedMeal(id: number) {
+    trackEvent("planned_meal_log", { meal_name: plannedMeals.find(m => m.id === id)?.name || null });
     const meal = plannedMeals.find(item => item.id === id);
     if (!meal) return;
     const today = localDateKey();
@@ -922,6 +934,7 @@ export default function Home() {
       const saved = await upsertWaterDay(createClient(), userId, date, amount);
       setWaterHistory(current => ({ ...current, [date]: saved }));
       notify(`Water saved for ${date === localDateKey() ? "today" : dateFromKey(date).toLocaleDateString([], { day: "numeric", month: "short" })}`);
+      trackEvent("water_log", { amount_ml: amount });
       return "";
     } catch {
       setWaterHistory(current => {
@@ -963,6 +976,7 @@ export default function Home() {
 
   async function usePhoto(file: File | undefined) {
     if (!file) return;
+    trackEvent("photo_scan_start");
     setAnalysis(null);
     setAnalysisError("");
     setUploadedData(null);
@@ -1040,6 +1054,7 @@ export default function Home() {
     mode: "search" | "saved" | "custom" = "search",
     food: ManualFoodItem | null = null,
   ) {
+    trackEvent("food_modal_open", { mode });
     setManualStartMode(mode);
     setManualInitialFood(food);
     setModal("manual");
@@ -1052,6 +1067,7 @@ export default function Home() {
     plannedDate?: string,
     mealSlot?: MealSlot,
   ) {
+    trackEvent("food_add_manual", { destination, food_name: food.name, grams });
     if (!userId) {
       notify("Your account is still loading. Please try again.");
       return false;
