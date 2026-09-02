@@ -90,6 +90,9 @@ import {
 } from "../lib/food-preferences";
 import FoodPalette, { type PaletteFood } from "./components/FoodPalette";
 import PlanReview, { type PlanMeal, type GeneratedPlan } from "./components/PlanReview";
+import { WeeklySummary } from "./components/WeeklySummary";
+import { RecipeCreator } from "./components/RecipeCreator";
+import { type Recipe } from "../lib/recipes";
 
 import {
   localDateKey,
@@ -140,6 +143,7 @@ import {
 const navItems: { id: Tab; label: string; icon: string }[] = [
   { id: "today", label: "Today", icon: "⌂" }, { id: "plan", label: "My Plan", icon: "▦" },
   { id: "log", label: "Log Food", icon: "+" }, { id: "grocery", label: "Grocery", icon: "✓" },
+  { id: "recipes", label: "Recipes", icon: "🍳" },
   { id: "progress", label: "History", icon: "↗" },
 ];
 
@@ -178,6 +182,8 @@ export default function Home() {
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlan | null>(null);
   const [planError, setPlanError] = useState("");
+  const [shareUrl, setShareUrl] = useState("");
+  const [sharingPlan, setSharingPlan] = useState(false);
 
   const meals = selectedDate ? mealHistory[selectedDate] || [] : [];
   const totals = mealTotals(meals);
@@ -486,6 +492,66 @@ export default function Home() {
   function notify(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2200);
+  }
+
+  async function sharePlan() {
+    if (!plannedMeals.length) {
+      notify("Add meals to your plan before sharing.");
+      return;
+    }
+    setSharingPlan(true);
+    try {
+      const weekMeals = mealsForWeek(plannedMeals, planWeekStart);
+      const mealsToShare = (weekMeals.length ? weekMeals : plannedMeals).map(m => ({
+        id: m.id, type: m.type, name: m.name, calories: m.calories,
+        protein: m.protein, carbs: m.carbs, fat: m.fat, time: m.time,
+        color: m.color, ingredients: m.ingredients, plannedDate: m.plannedDate,
+        mealSlot: m.mealSlot,
+      }));
+      const res = await fetch("/api/share-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          meals: mealsToShare,
+          planTitle: `MealRoute Plan — ${weekRangeLabel(planWeekStart)}`,
+          weekStart: planWeekStart,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        notify(data.error);
+      } else {
+        setShareUrl(data.shareUrl);
+        notify("Share link created! 📋");
+      }
+    } catch {
+      notify("Could not create share link.");
+    } finally {
+      setSharingPlan(false);
+    }
+  }
+
+  function logRecipe(recipe: Recipe) {
+    const today = localDateKey();
+    const newMeal: Meal = {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      type: "Recipe",
+      name: recipe.name,
+      calories: recipe.caloriesPerServing,
+      protein: recipe.proteinPerServing,
+      carbs: recipe.carbsPerServing,
+      fat: recipe.fatPerServing,
+      time: "",
+      eaten: false,
+      locked: false,
+      color: "salmon",
+      ingredients: recipe.ingredients.map(ing => ({ name: ing.name, amountGrams: ing.grams })),
+      micros: recipe.micros && Object.values(recipe.micros).some(v => v > 0) ? recipe.micros : undefined,
+    };
+    const updated = { ...mealHistory, [today]: [...(mealHistory[today] || []), newMeal] };
+    setMealHistory(updated);
+    saveMealState(updated, plannedMeals, `Logged 1 serving of ${recipe.name} 🍽️`);
+    setTab("today");
   }
 
   async function saveMealState(days: MealHistory, planned: Meal[], successMessage: string) {
@@ -1089,7 +1155,7 @@ export default function Home() {
   const topbarContext = tab === "grocery"
     ? `GROCERIES FOR ${groceryWeekLabel.toUpperCase()}`
     : selectedDateLabel ? selectedDateLabel.toUpperCase() : "YOUR NUTRITION";
-  const title = tab === "today" ? !selectedDate || selectedDate === localDateKey() ? "Today" : selectedDateLabel : tab === "plan" ? "My Plan" : tab === "log" ? "Log Food" : tab === "grocery" ? "Grocery List" : "History";
+  const title = tab === "today" ? !selectedDate || selectedDate === localDateKey() ? "Today" : selectedDateLabel : tab === "plan" ? "My Plan" : tab === "log" ? "Log Food" : tab === "grocery" ? "Grocery List" : tab === "recipes" ? "Recipes" : "History";
   const legacyMealCount = legacyImport
     ? Object.values(legacyImport.days).reduce((count, dayMeals) => count + dayMeals.length, 0) + legacyImport.planned.length
     : 0;
@@ -1169,6 +1235,42 @@ export default function Home() {
                         {planError && <p style={{ color: "#ee9e78", fontSize: "11px", margin: "12px 0 0" }}>{planError}</p>}
                       </div>
                       <Plan meals={plannedMeals} weekStart={planWeekStart || weekStartKey()} onWeekChange={setPlanWeekStart} onSchedule={updatePlannedMealSchedule} onRemove={removePlannedMeal} onLog={logPlannedMeal} onReviewGrocery={openWeeklyGrocery} focusDate={focusPlanDate} />
+                      <div style={{ marginTop: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <button
+                          className="primary"
+                          onClick={sharePlan}
+                          disabled={sharingPlan || !plannedMeals.length}
+                          style={{ flex: "1", minWidth: "120px", fontSize: "11px", padding: "12px", borderRadius: "14px", opacity: sharingPlan || !plannedMeals.length ? 0.5 : 1 }}
+                        >
+                          {sharingPlan ? "Creating link…" : "🔗 Share Plan"}
+                        </button>
+                        <button
+                          onClick={() => window.print()}
+                          style={{ padding: "12px 16px", borderRadius: "14px", border: "1px solid #2c352f", background: "transparent", color: "#8e9a91", fontSize: "11px", fontWeight: 700 }}
+                        >
+                          📄 Print / PDF
+                        </button>
+                      </div>
+                      {shareUrl && (
+                        <div style={{ marginTop: "10px", padding: "12px", background: "rgba(169,244,122,0.08)", border: "1px solid #2d392f", borderRadius: "12px" }}>
+                          <p style={{ fontSize: "10px", color: "var(--muted)", margin: "0 0 6px" }}>SHARE LINK</p>
+                          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <input
+                              type="text"
+                              readOnly
+                              value={shareUrl}
+                              onClick={(e) => (e.target as HTMLInputElement).select()}
+                              style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--panel)", color: "var(--green)", fontSize: "11px" }}
+                            />
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(shareUrl); notify("Link copied! 📋"); }}
+                              style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--green)", background: "transparent", color: "var(--green)", fontSize: "11px", fontWeight: 700 }}
+                            >
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                   {planSubView === "palette" && (
@@ -1207,7 +1309,11 @@ export default function Home() {
               )}
               {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} savedProducts={savedProducts} onManual={openManualFood} onBarcode={() => setModal("barcode")} />}
               {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} weekLabel={groceryWeekLabel} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
-              {tab === "progress" && <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />}
+              {tab === "recipes" && <RecipeCreator onLogRecipe={logRecipe} />}
+              {tab === "progress" && <>
+                <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />
+                <WeeklySummary profile={profile} />
+              </>}
             </>}
         </div>
 

@@ -9,7 +9,7 @@ import {
   type MealSlot,
 } from "./weekly-plan";
 
-export type Tab = "today" | "plan" | "log" | "grocery" | "progress";
+export type Tab = "today" | "plan" | "log" | "grocery" | "recipes" | "progress";
 export type PlanSubView = "week" | "palette" | "review";
 export type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string; ingredients?: PlannedIngredient[]; plannedDate?: string; mealSlot?: MealSlot; micros?: Micronutrients };
 export type LabelNutrition = { productName: string; energyValue: number; energyUnit: "kcal" | "kJ"; carbs: number; protein: number; fat: number; fibre: number };
