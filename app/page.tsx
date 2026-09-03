@@ -138,6 +138,8 @@ import {
   type LegacyImportData,
   type ProfileGoalUpdate,
   type ProfileMacroUpdate,
+  type ProfileDietaryUpdate,
+  type ProfileNotificationsUpdate,
   type WeightSaveResult,
 } from "../lib/app-utils";
 
@@ -166,7 +168,7 @@ export default function Home() {
   const [legacyImport, setLegacyImport] = useState<LegacyImportData | null>(null);
   const [importingLegacy, setImportingLegacy] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
-  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros" | "weight" | "manual" | "barcode">(null);
+  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros" | "weight" | "dietary" | "notifications" | "manual" | "barcode">(null);
   const [manualStartMode, setManualStartMode] = useState<"search" | "saved" | "custom">("search");
   const [manualInitialFood, setManualInitialFood] = useState<ManualFoodItem | null>(null);
   const [toast, setToast] = useState("");
@@ -714,6 +716,47 @@ export default function Home() {
     return "";
   }
 
+  async function saveProfileDietary(values: ProfileDietaryUpdate) {
+    if (!userId) return "Your account is still loading. Please try again.";
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(values)
+      .eq("user_id", userId)
+      .select(profileSelect)
+      .single();
+
+    if (error || !data) {
+      return "Your dietary preferences could not be saved. Please check your connection and try again.";
+    }
+
+    setProfile(data as MealRouteProfile);
+    trackEvent("dietary_prefs_saved", { diet_type: values.diet_type || "none", allergies: values.allergies.length });
+    notify("Your dietary preferences are updated");
+    return "";
+  }
+
+  async function saveProfileNotifications(values: ProfileNotificationsUpdate) {
+    if (!userId) return "Your account is still loading. Please try again.";
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(values)
+      .eq("user_id", userId)
+      .select(profileSelect)
+      .single();
+
+    if (error || !data) {
+      return "Your notification settings could not be saved. Please check your connection and try again.";
+    }
+
+    setProfile(data as MealRouteProfile);
+    const prefs = values.notification_prefs || {};
+    trackEvent("notification_settings_saved", { meals: Boolean(prefs.meals), water: Boolean(prefs.water), weekly: Boolean(prefs.weekly) });
+    notify("Your notification settings are updated");
+    return "";
+  }
+
   async function saveWeightEntry(loggedOn: string, weightKg: number): Promise<WeightSaveResult> {
     if (!userId) {
       return { error: "Your account is still loading. Please try again.", profileUpdated: false };
@@ -1204,7 +1247,7 @@ export default function Home() {
                 onOpenGoals={() => setModal("goals")}
               />
 
-              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} onBarcode={() => setModal("barcode")} micros={micros} />}
+              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} onBarcode={() => setModal("barcode")} micros={micros} notificationPrefs={profile?.notification_prefs} />}
               {tab === "plan" && (
                 <>
                   <div className="plan-sub-nav" style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
@@ -1348,7 +1391,7 @@ export default function Home() {
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} onSaveProfileDietary={saveProfileDietary} onSaveProfileNotifications={saveProfileNotifications} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} />}
       <LegalFooter />
     </main>
   );

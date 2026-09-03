@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import { type MealRouteProfile } from "../../lib/profile";
-import { type ProfileGoalUpdate, type ProfileMacroUpdate } from "../../lib/app-utils";
+import { type ProfileGoalUpdate, type ProfileMacroUpdate, type ProfileDietaryUpdate, type ProfileNotificationsUpdate } from "../../lib/app-utils";
 import { type MacroTargets, macroCalories, macroPercentages, suggestedMacroTargets } from "../../lib/macro-targets";
 import { activityLabels, cmToImperial, goalLabels, suggestedCalories, type Activity, type Goal } from "../../lib/calorie-goal";
 
@@ -290,5 +290,137 @@ export function MacroTargetsEditor({
     <button className="primary full" type="button" disabled={saving} onClick={save}>{saving ? "Saving targets…" : "Save macro targets"}</button>
   </div>;
 }
+export const dietTypeLabels: Record<string, string> = {
+  vegetarian: "Vegetarian",
+  vegan: "Vegan",
+  pescatarian: "Pescatarian",
+  halal: "Halal",
+  keto: "Keto",
+  low_carb: "Low-carb",
+};
 
+export const allergyLabels: Record<string, string> = {
+  dairy: "Dairy",
+  eggs: "Eggs",
+  fish: "Fish",
+  shellfish: "Shellfish",
+  peanuts: "Peanuts",
+  tree_nuts: "Tree nuts",
+  gluten: "Gluten / wheat",
+  soy: "Soy",
+  sesame: "Sesame",
+};
 
+export function DietaryPreferencesEditor({
+  profile,
+  onBack,
+  onSave,
+}: {
+  profile: MealRouteProfile;
+  onBack: () => void;
+  onSave: (values: ProfileDietaryUpdate) => Promise<string>;
+}) {
+  const [dietType, setDietType] = useState<string>(profile.diet_type || "");
+  const [allergies, setAllergies] = useState<string[]>(profile.allergies || []);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function toggleAllergy(value: string) {
+    setAllergies(current => current.includes(value) ? current.filter(item => item !== value) : [...current, value]);
+  }
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    const saveError = await onSave({
+      diet_type: (dietType || null) as MealRouteProfile["diet_type"],
+      allergies,
+    });
+    setSaving(false);
+    if (saveError) {
+      setError(saveError);
+      return;
+    }
+    onBack();
+  }
+
+  return <div className="goals-editor dietary-editor">
+    <button className="goals-back" type="button" onClick={onBack}>‹ Profile</button>
+    <p className="eyebrow">DIETARY PREFERENCES</p>
+    <h2>Diet and allergies</h2>
+    <p className="modal-sub">MealRoute uses these to keep your AI meal plans compatible with your diet and to skip palette foods you avoid.</p>
+
+    <section className="goals-section">
+      <div className="goals-section-title"><strong>Diet type</strong><span>Applies to future generated plans</span></div>
+      <div className="goals-choice-grid">
+        <button type="button" className={dietType === "" ? "active" : ""} onClick={() => setDietType("")}>No restriction</button>
+        {Object.entries(dietTypeLabels).map(([value, label]) => <button type="button" key={value} className={dietType === value ? "active" : ""} onClick={() => setDietType(value)}>{label}</button>)}
+      </div>
+    </section>
+
+    <section className="goals-section">
+      <div className="goals-section-title"><strong>Allergies and intolerances</strong><span>Tap to select · tap again to remove</span></div>
+      <div className="allergy-chips">
+        {Object.entries(allergyLabels).map(([value, label]) => <button type="button" key={value} className={allergies.includes(value) ? "active" : ""} onClick={() => toggleAllergy(value)}>{label}</button>)}
+      </div>
+    </section>
+
+    {error && <div className="auth-error" role="alert">{error}</div>}
+    <button className="primary full" type="button" disabled={saving} onClick={save}>{saving ? "Saving preferences…" : "Save dietary preferences"}</button>
+  </div>;
+}
+
+export function NotificationsEditor({
+  profile,
+  onBack,
+  onSave,
+}: {
+  profile: MealRouteProfile;
+  onBack: () => void;
+  onSave: (values: ProfileNotificationsUpdate) => Promise<string>;
+}) {
+  const [prefs, setPrefs] = useState({
+    meals: Boolean(profile.notification_prefs?.meals),
+    water: Boolean(profile.notification_prefs?.water),
+    weekly: Boolean(profile.notification_prefs?.weekly),
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const rows: { key: "meals" | "water" | "weekly"; title: string; description: string }[] = [
+    { key: "meals", title: "Meal logging reminders", description: "A nudge on your Today dashboard when you haven't logged any meals by midday" },
+    { key: "water", title: "Hydration reminders", description: "A nudge on your Today dashboard if you're behind on water after midday" },
+    { key: "weekly", title: "Weekly summary reminder", description: "Highlights your weekly nutrition summary when a new one is ready" },
+  ];
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    const saveError = await onSave({ notification_prefs: prefs });
+    setSaving(false);
+    if (saveError) {
+      setError(saveError);
+      return;
+    }
+    onBack();
+  }
+
+  return <div className="goals-editor notifications-editor">
+    <button className="goals-back" type="button" onClick={onBack}>‹ Profile</button>
+    <p className="eyebrow">NOTIFICATIONS</p>
+    <h2>Reminders</h2>
+    <p className="modal-sub">Choose which in-app reminders MealRoute shows you. Reminders appear on your Today dashboard.</p>
+
+    <section className="goals-section">
+      <div className="notification-toggles">
+        {rows.map(row => <button type="button" key={row.key} className={`toggle-row ${prefs[row.key] ? "on" : ""}`} onClick={() => setPrefs(current => ({ ...current, [row.key]: !current[row.key] }))}>
+          <span><strong>{row.title}</strong><small>{row.description}</small></span>
+          <i className="toggle-switch"><b /></i>
+        </button>)}
+      </div>
+    </section>
+
+    {error && <div className="auth-error" role="alert">{error}</div>}
+    <button className="primary full" type="button" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save notification settings"}</button>
+  </div>;
+}

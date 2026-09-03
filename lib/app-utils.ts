@@ -42,6 +42,14 @@ export type ProfileMacroUpdate = Pick<
   MealRouteProfile,
   "protein_goal_g" | "carbs_goal_g" | "fat_goal_g" | "macro_targets_custom"
 >;
+export type ProfileDietaryUpdate = Pick<
+  MealRouteProfile,
+  "diet_type" | "allergies"
+>;
+export type ProfileNotificationsUpdate = Pick<
+  MealRouteProfile,
+  "notification_prefs"
+>;
 export type WeightSaveResult = {
   error: string;
   profileUpdated: boolean;

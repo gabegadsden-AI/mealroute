@@ -6,7 +6,7 @@ import { type Micronutrients, MICRONUTRIENT_LABELS, MICRONUTRIENT_UNITS, MICRONU
 
 const TOP_MICROS: (keyof Micronutrients)[] = ["calcium", "iron", "vitaminC", "vitaminD", "potassium", "sodium"];
 
-export function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onBarcode, micros }: any) {
+export function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onBarcode, micros, notificationPrefs }: any) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const dates = today ? Array.from({ length: 7 }, (_, index) => {
@@ -18,7 +18,16 @@ export function Today({ meals, selectedDate, onSelectDate, consumed, protein, ca
     ? selectedDate === (today ? localDateKey(today) : "") ? "Today's meals" : `${dateFromKey(selectedDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" })} meals`
     : "Today's meals";
   const showMicros = hasMicronutrientData(micros as Micronutrients | undefined);
+  const hour = today ? today.getHours() : 0;
+  const isToday = !selectedDate || (today ? selectedDate === localDateKey(today) : false);
+  const prefs = (notificationPrefs || {}) as { meals?: boolean; water?: boolean };
+  const mealNudge = isToday && Boolean(prefs.meals) && hour >= 12 && (!meals || meals.length === 0);
+  const waterNudge = isToday && Boolean(prefs.water) && hour >= 12 && waterGoal > 0 && water < waterGoal;
   return <>
+    {(mealNudge || waterNudge) && <section className="today-nudges">
+      {mealNudge && <div className="nudge-chip"><b>🍽</b><span>You haven't logged any meals yet today. <button onClick={() => onLog()}>Log your first meal</button></span></div>}
+      {waterNudge && <div className="nudge-chip"><b>💧</b><span>Hydration check — {(waterGoal - water).toLocaleString()} ml to go. <button onClick={() => onWater()}>Log water</button></span></div>}
+    </section>}
     <section className="daily-overview">
       <div className="today-date-strip">
         {dates.length === 0 && Array.from({ length: 7 }, (_, index) => <button key={index} disabled><span>--</span><strong>--</strong></button>)}

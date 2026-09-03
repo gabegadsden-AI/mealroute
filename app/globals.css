@@ -102,3 +102,25 @@ button { color:inherit; font:inherit; cursor:pointer; }
 .onboarding-actions .primary{flex:1;border:1px solid var(--green);border-radius:13px;padding:13px;font-size:12px;font-weight:850}
 .onboarding-actions .secondary{border:1px solid #344039;background:#171e19;color:var(--text);border-radius:13px;padding:13px 16px;font-size:11px;font-weight:750}
 .onboarding-save-note{text-align:center;color:#647068;font-size:8px;margin:14px 0 0}
+
+/* ===== Dietary & notification editors ===== */
+.allergy-chips{display:flex;flex-wrap:wrap;gap:8px}
+.allergy-chips button{border:1px solid #303b32;background:#19201b;border-radius:99px;padding:9px 14px;font-size:10px;font-weight:750;color:var(--muted);transition:background .15s ease,border-color .15s ease,color .15s ease;cursor:pointer}
+.allergy-chips button.active{background:var(--green);border-color:var(--green);color:#102016}
+.notification-toggles{display:flex;flex-direction:column;gap:10px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid #2f3a32;background:#19201b;border-radius:15px;padding:13px;text-align:left;width:100%;cursor:pointer;transition:border-color .15s ease,background .15s ease}
+.toggle-row span{display:flex;flex-direction:column;gap:4px}
+.toggle-row strong{color:var(--text);font-size:12px}
+.toggle-row small{color:var(--muted);font-size:9px;line-height:1.5}
+.toggle-switch{flex:0 0 auto;width:40px;height:23px;border-radius:99px;background:#2c3630;position:relative;transition:background .15s ease}
+.toggle-switch b{position:absolute;top:2.5px;left:3px;width:18px;height:18px;border-radius:50%;background:#778177;transition:left .15s ease,background .15s ease}
+.toggle-row.on{border-color:#3d5a3a}
+.toggle-row.on .toggle-switch{background:var(--green)}
+.toggle-row.on .toggle-switch b{left:19px;background:#102016}
+
+/* ===== Today nudges (notification prefs) ===== */
+.today-nudges{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.nudge-chip{display:flex;align-items:center;gap:10px;background:#1c2a1e;border:1px solid #3d5a3a;border-radius:14px;padding:11px 13px}
+.nudge-chip b{font-size:15px}
+.nudge-chip span{color:#c9dcc7;font-size:10px;line-height:1.5}
+.nudge-chip button{border:0;background:transparent;color:var(--green);font-size:10px;font-weight:800;padding:0;text-decoration:underline}

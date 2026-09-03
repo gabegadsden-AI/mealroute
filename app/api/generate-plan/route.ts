@@ -101,7 +101,7 @@ export async function POST(request: Request) {
     // Load user profile
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("calorie_goal,protein_goal_g,carbs_goal_g,fat_goal_g,primary_goal,suggested_calorie_goal")
+      .select("calorie_goal,protein_goal_g,carbs_goal_g,fat_goal_g,primary_goal,suggested_calorie_goal,diet_type,allergies")
       .eq("user_id", userId)
       .single();
 
@@ -135,6 +135,62 @@ export async function POST(request: Request) {
       dates.push(`${y}-${m}-${day}`);
     }
 
+    // Dietary restrictions — filter palette foods that conflict with diet type or allergies
+    const dietType = (profile as any).diet_type || null;
+    const allergies = Array.isArray((profile as any).allergies) ? (profile as any).allergies as string[] : [];
+
+    // Name-keyword checks (categories like "Meat & seafood" mix fish and meat, so names are primary)
+    const DIET_MEAT_KEYWORDS = ["chicken", "beef", "pork", "lamb", "steak", "mince", "bacon", "ham", "turkey", "veal", "meat"];
+    const DIET_SEAFOOD_KEYWORDS = ["fish", "tuna", "salmon", "cod", "tilapia", "prawn", "shrimp", "seafood"];
+    const DIET_ANIMAL_KEYWORDS = [...DIET_MEAT_KEYWORDS, ...DIET_SEAFOOD_KEYWORDS];
+    const DIET_BLOCKED_KEYWORDS: Record<string, string[]> = {
+      vegetarian: DIET_MEAT_KEYWORDS,
+      vegan: DIET_ANIMAL_KEYWORDS,
+      pescatarian: DIET_MEAT_KEYWORDS,
+      halal: ["pork", "bacon", "ham", "lard", "gelatine", "gelatin"],
+      keto: ["rice", "pasta", "bread", "noodle", "flour", "sugar", "oat", "cereal", "potato"],
+      low_carb: ["rice", "pasta", "bread", "noodle", "flour", "sugar", "cereal", "potato"],
+    };
+    const VEGAN_DAIRY_EGG_KEYWORDS = ["milk", "cheese", "yogurt", "yoghurt", "butter", "cream", "egg", "honey", "whey"];
+    const ALLERGY_KEYWORDS: Record<string, string[]> = {
+      dairy: ["milk", "cheese", "yogurt", "yoghurt", "butter", "cream", "whey"],
+      eggs: ["egg", "mayo", "mayonnaise"],
+      fish: ["fish", "tuna", "salmon", "cod", "tilapia", "anchov"],
+      shellfish: ["shrimp", "prawn", "crab", "lobster", "shellfish", "oyster", "mussel"],
+      peanuts: ["peanut"],
+      tree_nuts: ["almond", "cashew", "walnut", "pecan", "pistachio", "hazelnut", "macadamia"],
+      gluten: ["wheat", "bread", "pasta", "noodle", "flour", "barley", "rye", "oat", "semolina"],
+      soy: ["soy", "tofu", "edamame", "miso"],
+      sesame: ["sesame", "tahini"],
+    };
+
+    function foodConflicts(food: { food_name?: string; category?: string }): string | null {
+      const name = String(food.food_name || "").toLowerCase();
+      const blockedDietKeywords: string[] = (dietType && DIET_BLOCKED_KEYWORDS[dietType]) || [];
+      if (blockedDietKeywords.some(keyword => name.includes(keyword))) return "diet";
+      if (dietType === "vegan" && VEGAN_DAIRY_EGG_KEYWORDS.some(keyword => name.includes(keyword))) return "diet";
+      for (const allergy of allergies) {
+        const keywords: string[] = ALLERGY_KEYWORDS[allergy] || [];
+        if (keywords.some(keyword => name.includes(keyword))) return "allergy";
+      }
+      // Category fallback for foods whose names don't match keywords
+      const category = String(food.category || "");
+      if ((dietType === "vegetarian" || dietType === "vegan") && category === "Meat & seafood") return "diet";
+      if (dietType === "vegan" && category === "Dairy & eggs") return "diet";
+      return null;
+    }
+
+    const filteredPreferences = (preferences as any[]).filter(food => !foodConflicts(food));
+    const skippedConflictFoods = (preferences as any[])
+      .filter(food => foodConflicts(food))
+      .map(food => String(food.food_name || ""));
+
+    if (filteredPreferences.length < 1) {
+      return Response.json({
+        error: "All foods in your palette conflict with your dietary preferences. Add more compatible foods to your palette, or review Profile → Dietary preferences.",
+      }, { status: 400 });
+    }
+
     // Group foods by their assigned slots — respect the user's choices EXACTLY.
     const foodsBySlot: Record<string, Food[]> = {
       breakfast: [],
@@ -145,7 +201,7 @@ export async function POST(request: Request) {
 
     let unassignedFoodNames: string[] = [];
 
-    for (const food of preferences as any[]) {
+    for (const food of filteredPreferences) {
       const foodObj: Food = {
         name: String(food.food_name || ""),
         caloriesPer100g: Number(food.calories_per_100g) || 0,
@@ -267,6 +323,9 @@ export async function POST(request: Request) {
     }
     if (emptySlots.length > 0) {
       warnings.push(`No foods assigned to: ${emptySlots.map(s => SLOT_LABELS[s]).join(", ")}. Those meal slots will be empty in the plan.`);
+    }
+    if (skippedConflictFoods.length > 0) {
+      warnings.push(`${skippedConflictFoods.length} palette food(s) skipped because they conflict with your dietary preferences: ${skippedConflictFoods.join(", ")}.`);
     }
     if (unassignedFoodNames.length > 0) {
       warnings.push(`${unassignedFoodNames.length} food(s) in your palette have no meal assigned and were skipped: ${unassignedFoodNames.join(", ")}.`);
