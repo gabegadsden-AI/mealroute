@@ -338,7 +338,7 @@ export function RecipeCreator({ onLogRecipe }: { onLogRecipe: (recipe: Recipe) =
                   <div className="plan-actions" style={{ marginTop: "10px" }}>
                     <button onClick={() => onLogRecipe(recipe)} style={{ color: "var(--green)" }}>＋ Log serving</button>
                     <button onClick={() => startEdit(recipe)}>Edit</button>
-                    <button onClick={() => handleDelete(recipe.id)} style={{ color: "#e57373" }}>Delete</button>
+                    <button onClick={() => handleDelete(recipe.id)} style={{ color: "#c14d43" }}>Delete</button>
                   </div>
                 </div>
               ))}
@@ -489,7 +489,7 @@ export function RecipeCreator({ onLogRecipe }: { onLogRecipe: (recipe: Recipe) =
                     <span style={{ color: "var(--muted)", fontSize: "10px" }}>g</span>
                     <button
                       onClick={() => removeIngredient(index)}
-                      style={{ background: "none", border: "0", color: "#e57373", fontSize: "16px", padding: "4px 8px" }}
+                      style={{ background: "none", border: "0", color: "#c14d43", fontSize: "16px", padding: "4px 8px" }}
                     >
                       ×
                     </button>

@@ -7,10 +7,10 @@ export const metadata: Metadata = {
 
 const styles = {
   body: {
-    background: "#0a0a0a",
+    background: "#ffffff",
     minHeight: "100vh",
     fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
-    color: "#e0e0e0",
+    color: "#dfe6e0",
     lineHeight: 1.7,
   },
   container: {
@@ -28,8 +28,8 @@ const styles = {
     width: "44px",
     height: "44px",
     borderRadius: "10px",
-    background: "#c0ff80",
-    color: "#0a0a0a",
+    background: "#4a8f3a",
+    color: "#ffffff",
     display: "flex" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
@@ -45,14 +45,14 @@ const styles = {
   },
   tagline: {
     fontSize: "12px",
-    color: "#8e9a91",
+    color: "#6f7d74",
     margin: 0,
   },
   eyebrow: {
     fontSize: "11px",
     textTransform: "uppercase" as const,
     letterSpacing: "0.12em",
-    color: "#8e9a91",
+    color: "#6f7d74",
     marginBottom: "8px",
   },
   title: {
@@ -64,15 +64,15 @@ const styles = {
   },
   subtitle: {
     fontSize: "14px",
-    color: "#8e9a91",
+    color: "#6f7d74",
     margin: "0 0 40px",
   },
   card: {
     display: "block" as const,
     padding: "24px",
     borderRadius: "12px",
-    background: "#121212",
-    border: "1px solid #222",
+    background: "#ffffff",
+    border: "1px solid #1c2920",
     textDecoration: "none",
     marginBottom: "16px",
     transition: "border-color 0.2s",
@@ -85,11 +85,11 @@ const styles = {
   },
   cardDesc: {
     fontSize: "13px",
-    color: "#8e9a91",
+    color: "#6f7d74",
     margin: 0,
   },
   arrow: {
-    color: "#c0ff80",
+    color: "#4a8f3a",
     fontSize: "14px",
     marginTop: "8px",
     display: "block" as const,
@@ -97,13 +97,13 @@ const styles = {
   footer: {
     marginTop: "48px",
     paddingTop: "24px",
-    borderTop: "1px solid #222",
+    borderTop: "1px solid #1c2920",
     fontSize: "12px",
-    color: "#666",
+    color: "#6f7d74",
     textAlign: "center" as const,
   },
   footerLink: {
-    color: "#c0ff80",
+    color: "#4a8f3a",
     textDecoration: "none",
     fontSize: "13px",
   },

@@ -1,19 +1,19 @@
 :root {
-  --bg: #090d0b;
-  --panel: #111714;
-  --panel-2: #171e1a;
-  --line: #273029;
-  --text: #f4f7f4;
-  --muted: #8e9a91;
-  --green: #a9f47a;
-  --green-dark: #193423;
-  --orange: #f0a467;
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f4f8f5;
+  --line: #dfe6e0;
+  --text: #1c2920;
+  --muted: #6f7d74;
+  --green: #4a8f3a;
+  --green-dark: #e8f4e4;
+  --orange: #9d611c;
 }
 
 /* ───── BASE ───── */
 .landing-page {
   min-height: 100vh;
-  background: radial-gradient(circle at 78% 4%, #17231c 0, transparent 30%), var(--bg);
+  background: radial-gradient(circle at 78% 4%, #eef6ee 0, transparent 30%), var(--bg);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   overflow-x: hidden;
@@ -26,7 +26,7 @@
   position: sticky; top: 0; z-index: 50;
   display: flex; align-items: center; justify-content: space-between;
   padding: 18px max(22px, calc((100vw - 1100px) / 2));
-  background: rgba(9, 13, 11, 0.85);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--line);
 }
@@ -39,7 +39,7 @@
 .landing-nav-login { color: var(--text) !important; }
 .landing-nav-cta {
   background: var(--green) !important;
-  color: #101810 !important;
+  color: #ffffff !important;
   padding: 9px 18px;
   border-radius: 12px;
   font-weight: 800 !important;
@@ -76,7 +76,7 @@
   text-transform: uppercase;
 }
 .landing-hero-sub {
-  color: #a0aaa2;
+  color: #6f7d74;
   font-size: 16px;
   line-height: 1.65;
   max-width: 480px;
@@ -85,7 +85,7 @@
 .landing-hero-cta { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
 .landing-cta-primary {
   background: var(--green);
-  color: #101810;
+  color: #ffffff;
   padding: 15px 30px;
   border-radius: 16px;
   font-weight: 850;
@@ -93,14 +93,14 @@
   border: 0;
   display: inline-block;
   transition: transform 0.15s, box-shadow 0.15s;
-  box-shadow: 0 6px 24px #a9f47a22;
+  box-shadow: 0 6px 24px #4a8f3a22;
 }
-.landing-cta-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 32px #a9f47a33; }
+.landing-cta-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 32px #4a8f3a33; }
 .landing-cta-primary.big { padding: 18px 40px; font-size: 17px; margin-top: 8px; }
 .landing-cta-secondary {
   background: transparent;
   color: var(--text);
-  border: 1px solid #3a463d;
+  border: 1px solid #c9dcc7;
   padding: 15px 30px;
   border-radius: 16px;
   font-weight: 700;
@@ -110,7 +110,7 @@
 }
 .landing-cta-secondary:hover { border-color: var(--green); }
 .landing-disclaimer {
-  color: #6f7971;
+  color: #9aa49d;
   font-size: 11px;
   line-height: 1.6;
   max-width: 460px;
@@ -121,8 +121,8 @@
 .landing-hero-visual { display: flex; justify-content: center; }
 .landing-phone-mockup {
   width: 300px;
-  background: linear-gradient(145deg, #18221b, #111713 68%);
-  border: 1px solid #2b392e;
+  background: linear-gradient(145deg, #ffffff, #f4f8f5 68%);
+  border: 1px solid #dfe6e0;
   border-radius: 28px;
   padding: 18px;
   box-shadow: 0 20px 60px #000a;
@@ -133,7 +133,7 @@
   position: absolute;
   width: 140px; height: 140px;
   border-radius: 50%;
-  background: #a9f47a09;
+  background: #4a8f3a09;
   right: -50px; top: -60px;
   z-index: 0;
 }
@@ -143,7 +143,7 @@
   position: relative; z-index: 1;
 }
 .mockup-brandmark {
-  background: var(--green); color: #0c160e;
+  background: var(--green); color: #ffffff;
   width: 32px; height: 32px; border-radius: 10px;
   display: grid; place-items: center;
   font-weight: 950; font-size: 16px;
@@ -153,8 +153,8 @@
 .mockup-topbar small { display: block; color: var(--muted); font-size: 9px; }
 .mockup-avatar {
   width: 34px; height: 34px; border-radius: 50%;
-  border: 1px solid #3a463d;
-  background: linear-gradient(145deg, #5e785e, #263a2b);
+  border: 1px solid #c9dcc7;
+  background: linear-gradient(145deg, #d7ecd4, #b6d8b0);
   font-size: 11px; font-weight: 800;
   display: grid; place-items: center;
 }
@@ -162,13 +162,13 @@
   --progress: 230deg;
   width: 110px; height: 110px; border-radius: 50%;
   display: grid; place-items: center;
-  background: conic-gradient(var(--green) var(--progress), #293129 0);
+  background: conic-gradient(var(--green) var(--progress), #dfe6e0 0);
   position: relative;
   margin: 0 auto 16px;
-  box-shadow: 0 0 28px #a9f47a13;
+  box-shadow: 0 0 28px #4a8f3a13;
   z-index: 1;
 }
-.mockup-ring:before { content: ""; position: absolute; inset: 9px; background: #131a16; border-radius: 50%; }
+.mockup-ring:before { content: ""; position: absolute; inset: 9px; background: #ffffff; border-radius: 50%; }
 .mockup-ring div { position: relative; text-align: center; }
 .mockup-ring strong { display: block; font-size: 24px; letter-spacing: -0.05em; }
 .mockup-ring span { display: block; font-size: 9px; color: var(--muted); }
@@ -180,12 +180,12 @@
 .mockup-macros > div { display: flex; flex-direction: column; gap: 4px; }
 .mockup-macros span { color: var(--muted); font-size: 8px; }
 .mockup-macros strong { font-size: 10px; }
-.mockup-macros i { display: block; height: 4px; border-radius: 4px; background: #29312b; overflow: hidden; }
+.mockup-macros i { display: block; height: 4px; border-radius: 4px; background: #e4e9e5; overflow: hidden; }
 .mockup-macros i b { display: block; height: 100%; background: var(--green); border-radius: 4px; }
 .mockup-meal {
   display: flex; align-items: center; gap: 10px;
   padding: 9px; background: var(--panel);
-  border: 1px solid #242d27; border-radius: 14px;
+  border: 1px solid #dfe6e0; border-radius: 14px;
   margin-bottom: 8px; position: relative; z-index: 1;
 }
 .mockup-meal-img {
@@ -202,13 +202,13 @@
 .mockup-meal-info { flex: 1; min-width: 0; }
 .mockup-meal-info span { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: 0.07em; }
 .mockup-meal-info strong { display: block; font-size: 12px; margin: 3px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mockup-meal-info p { color: #98a49b; font-size: 9px; margin: 0; }
+.mockup-meal-info p { color: #6f7d74; font-size: 9px; margin: 0; }
 .mockup-check {
-  width: 24px; height: 24px; border: 1px solid #465149;
+  width: 24px; height: 24px; border: 1px solid #dfe6e0;
   border-radius: 50%; display: grid; place-items: center;
   font-size: 10px; font-weight: 900;
 }
-.mockup-check.checked { background: var(--green); border-color: var(--green); color: #142016; }
+.mockup-check.checked { background: var(--green); border-color: var(--green); color: #ffffff; }
 
 /* ───── SECTIONS ───── */
 .landing-section {
@@ -235,7 +235,7 @@
 }
 .feature-card {
   background: var(--panel);
-  border: 1px solid #242d27;
+  border: 1px solid #dfe6e0;
   border-radius: 20px;
   padding: 28px 22px;
   transition: border-color 0.2s, transform 0.2s;
@@ -251,7 +251,7 @@
   margin-bottom: 16px;
 }
 .feature-card h3 { font-size: 17px; margin: 0 0 8px; letter-spacing: -0.03em; }
-.feature-card p { color: #98a49b; font-size: 13px; line-height: 1.65; margin: 0; }
+.feature-card p { color: #6f7d74; font-size: 13px; line-height: 1.65; margin: 0; }
 .coming-soon {
   display: inline-block;
   background: var(--green-dark);
@@ -273,8 +273,8 @@
   gap: 20px;
 }
 .how-card {
-  background: linear-gradient(145deg, #141c17, #101612);
-  border: 1px solid #2d392f;
+  background: linear-gradient(145deg, #ffffff, #f4f8f5);
+  border: 1px solid #dfe6e0;
   border-radius: 22px;
   padding: 30px 24px;
   position: relative;
@@ -284,13 +284,13 @@
   width: 42px; height: 42px;
   border-radius: 14px;
   background: var(--green);
-  color: #101810;
+  color: #ffffff;
   font-size: 18px;
   font-weight: 900;
   margin-bottom: 18px;
 }
 .how-card h3 { font-size: 17px; margin: 0 0 8px; letter-spacing: -0.03em; }
-.how-card p { color: #98a49b; font-size: 13px; line-height: 1.65; margin: 0; }
+.how-card p { color: #6f7d74; font-size: 13px; line-height: 1.65; margin: 0; }
 
 /* ───── WHO IT'S FOR ───── */
 .who-grid {
@@ -300,14 +300,14 @@
 }
 .who-card {
   background: var(--panel);
-  border: 1px solid #242d27;
+  border: 1px solid #dfe6e0;
   border-radius: 20px;
   padding: 28px 22px;
   text-align: center;
 }
 .who-icon { font-size: 36px; margin-bottom: 14px; display: block; }
 .who-card h3 { font-size: 16px; margin: 0 0 8px; letter-spacing: -0.03em; }
-.who-card p { color: #98a49b; font-size: 13px; line-height: 1.65; margin: 0; }
+.who-card p { color: #6f7d74; font-size: 13px; line-height: 1.65; margin: 0; }
 
 /* ───── CTA SECTION ───── */
 .landing-cta-section {
@@ -315,14 +315,14 @@
   display: flex; justify-content: center;
 }
 .landing-cta-card {
-  background: linear-gradient(145deg, #18221b, #111713 68%);
-  border: 1px solid #2b392e;
+  background: linear-gradient(145deg, #ffffff, #f4f8f5 68%);
+  border: 1px solid #dfe6e0;
   border-radius: 32px;
   padding: 50px 40px;
   text-align: center;
   max-width: 640px;
   width: 100%;
-  box-shadow: 0 18px 45px #0006;
+  box-shadow: 0 18px 45px #1c292012;
   position: relative;
   overflow: hidden;
 }
@@ -331,7 +331,7 @@
   position: absolute;
   width: 200px; height: 200px;
   border-radius: 50%;
-  background: #a9f47a09;
+  background: #4a8f3a09;
   right: -80px; top: -80px;
 }
 .landing-cta-card h2 {
@@ -339,14 +339,14 @@
   margin: 0 0 12px; font-weight: 900;
   position: relative;
 }
-.landing-cta-card > p { color: #a0aaa2; font-size: 15px; margin: 0 0 20px; position: relative; }
+.landing-cta-card > p { color: #6f7d74; font-size: 15px; margin: 0 0 20px; position: relative; }
 .landing-cta-card .landing-disclaimer { margin-top: 20px; position: relative; }
 
 /* ───── FOOTER ───── */
 .landing-footer {
   border-top: 1px solid var(--line);
   padding: 36px max(22px, calc((100vw - 1100px) / 2));
-  background: rgba(9, 13, 11, 0.5);
+  background: rgba(255, 255, 255, 0.5);
 }
 .landing-footer-content {
   max-width: 1100px;
@@ -360,18 +360,18 @@
 .landing-footer-links { display: flex; gap: 22px; }
 .landing-footer-links a { color: var(--muted); font-size: 13px; font-weight: 600; transition: color 0.2s; }
 .landing-footer-links a:hover { color: var(--text); }
-.landing-footer-text { color: #6f7971; font-size: 11px; margin: 0; }
+.landing-footer-text { color: #9aa49d; font-size: 11px; margin: 0; }
 
 /* ───── BRANDMARK (shared) ───── */
 .landing-page .brandmark {
   background: var(--green);
-  color: #0c160e;
+  color: #ffffff;
   width: 38px; height: 38px;
   border-radius: 12px;
   display: grid; place-items: center;
   font-weight: 950; font-size: 21px;
   transform: rotate(-4deg);
-  box-shadow: 0 6px 20px #a9f47a22;
+  box-shadow: 0 6px 20px #4a8f3a22;
   flex-shrink: 0;
 }
 

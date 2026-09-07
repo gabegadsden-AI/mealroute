@@ -2,7 +2,6 @@
 import { Progress } from "./components/Progress";
 import { Today } from "./components/Today";
 import { Plan } from "./components/Plan";
-import { Log } from "./components/Log";
 import { Grocery } from "./components/Grocery";
 import { Modal } from "./components/Modal";
 import { Brand, profileInitials } from "./components/ProfileEditors";
@@ -145,7 +144,7 @@ import {
 
 const navItems: { id: Tab; label: string; icon: string }[] = [
   { id: "today", label: "Today", icon: "⌂" }, { id: "plan", label: "My Plan", icon: "▦" },
-  { id: "log", label: "Log Food", icon: "+" }, { id: "grocery", label: "Grocery", icon: "✓" },
+  { id: "grocery", label: "Grocery", icon: "✓" },
   { id: "recipes", label: "Recipes", icon: "🍳" },
   { id: "progress", label: "History", icon: "↗" },
 ];
@@ -1214,7 +1213,7 @@ export default function Home() {
   const topbarContext = tab === "grocery"
     ? `GROCERIES FOR ${groceryWeekLabel.toUpperCase()}`
     : selectedDateLabel ? selectedDateLabel.toUpperCase() : "YOUR NUTRITION";
-  const title = tab === "today" ? !selectedDate || selectedDate === localDateKey() ? "Today" : selectedDateLabel : tab === "plan" ? "My Plan" : tab === "log" ? "Log Food" : tab === "grocery" ? "Grocery List" : tab === "recipes" ? "Recipes" : "History";
+  const title = tab === "today" ? !selectedDate || selectedDate === localDateKey() ? "Today" : selectedDateLabel : tab === "plan" ? "My Plan" : tab === "grocery" ? "Grocery List" : tab === "recipes" ? "Recipes" : "History";
   const legacyMealCount = legacyImport
     ? Object.values(legacyImport.days).reduce((count, dayMeals) => count + dayMeals.length, 0) + legacyImport.planned.length
     : 0;
@@ -1253,29 +1252,29 @@ export default function Home() {
                   <div className="plan-sub-nav" style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
                     <button className={planSubView === "week" ? "active" : ""} style={{
                       flex: 1, padding: "10px", borderRadius: "12px", fontSize: "11px", fontWeight: 700,
-                      border: planSubView === "week" ? "1px solid var(--green)" : "1px solid #2c352f",
-                      background: planSubView === "week" ? "rgba(169,244,122,0.1)" : "transparent",
-                      color: planSubView === "week" ? "var(--green)" : "#8e9a91",
+                      border: planSubView === "week" ? "1px solid var(--green)" : "1px solid #dfe6e0",
+                      background: planSubView === "week" ? "rgba(74,143,58,0.1)" : "transparent",
+                      color: planSubView === "week" ? "var(--green)" : "#6f7d74",
                     }} onClick={() => setPlanSubView("week")}>Weekly Plan</button>
                     <button className={planSubView === "palette" ? "active" : ""} style={{
                       flex: 1, padding: "10px", borderRadius: "12px", fontSize: "11px", fontWeight: 700,
-                      border: planSubView === "palette" ? "1px solid var(--green)" : "1px solid #2c352f",
-                      background: planSubView === "palette" ? "rgba(169,244,122,0.1)" : "transparent",
-                      color: planSubView === "palette" ? "var(--green)" : "#8e9a91",
+                      border: planSubView === "palette" ? "1px solid var(--green)" : "1px solid #dfe6e0",
+                      background: planSubView === "palette" ? "rgba(74,143,58,0.1)" : "transparent",
+                      color: planSubView === "palette" ? "var(--green)" : "#6f7d74",
                     }} onClick={() => setPlanSubView("palette")}>My Foods ({foodPalette.length})</button>
                   </div>
                   {planSubView === "week" && (
                     <>
                       <div style={{
-                        background: "linear-gradient(130deg,#1a241d,#101612)",
-                        border: "1px solid #2d392f",
+                        background: "linear-gradient(130deg,#ffffff,#f4f8f5)",
+                        border: "1px solid #dfe6e0",
                         borderRadius: "22px",
                         padding: "20px",
                         marginBottom: "16px",
                       }}>
                         <p className="eyebrow" style={{ margin: "0 0 6px" }}>AI PLAN GENERATOR</p>
                         <h2 style={{ fontSize: "18px", margin: "0 0 8px", letterSpacing: "-.03em" }}>Let MealRoute plan your week</h2>
-                        <p style={{ color: "#8e9a91", fontSize: "12px", margin: "0 0 14px", lineHeight: 1.5 }}>
+                        <p style={{ color: "#6f7d74", fontSize: "12px", margin: "0 0 14px", lineHeight: 1.5 }}>
                           {foodPalette.length < 3
                             ? "Add at least 3 foods to your palette, then generate a balanced meal plan in seconds."
                             : "Generate a balanced meal plan from your food palette, calibrated to your calorie and macro targets."}
@@ -1284,14 +1283,14 @@ export default function Home() {
                           {[3, 5, 7].map(d => (
                             <button key={d} disabled={generatingPlan || foodPalette.length < 3} onClick={() => void handleGeneratePlan(d)} style={{
                               flex: 1, padding: "12px", borderRadius: "14px", fontSize: "12px", fontWeight: 700,
-                              border: foodPalette.length < 3 ? "1px solid #2c352f" : "none",
+                              border: foodPalette.length < 3 ? "1px solid #dfe6e0" : "none",
                               background: foodPalette.length < 3 ? "transparent" : "var(--green)",
-                              color: foodPalette.length < 3 ? "#566158" : "#101810",
+                              color: foodPalette.length < 3 ? "#9aa49d" : "#ffffff",
                               opacity: generatingPlan ? 0.6 : 1,
                             }}>{generatingPlan ? "..." : `${d} days`}</button>
                           ))}
                         </div>
-                        {planError && <p style={{ color: "#ee9e78", fontSize: "11px", margin: "12px 0 0" }}>{planError}</p>}
+                        {planError && <p style={{ color: "#c75b39", fontSize: "11px", margin: "12px 0 0" }}>{planError}</p>}
                       </div>
                       <Plan meals={plannedMeals} weekStart={planWeekStart || weekStartKey()} onWeekChange={setPlanWeekStart} onSchedule={updatePlannedMealSchedule} onRemove={removePlannedMeal} onLog={logPlannedMeal} onReviewGrocery={openWeeklyGrocery} focusDate={focusPlanDate} />
                       <div style={{ marginTop: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -1305,13 +1304,13 @@ export default function Home() {
                         </button>
                         <button
                           onClick={() => window.print()}
-                          style={{ padding: "12px 16px", borderRadius: "14px", border: "1px solid #2c352f", background: "transparent", color: "#8e9a91", fontSize: "11px", fontWeight: 700 }}
+                          style={{ padding: "12px 16px", borderRadius: "14px", border: "1px solid #dfe6e0", background: "transparent", color: "#6f7d74", fontSize: "11px", fontWeight: 700 }}
                         >
                           📄 Print / PDF
                         </button>
                       </div>
                       {shareUrl && (
-                        <div style={{ marginTop: "10px", padding: "12px", background: "rgba(169,244,122,0.08)", border: "1px solid #2d392f", borderRadius: "12px" }}>
+                        <div style={{ marginTop: "10px", padding: "12px", background: "rgba(74,143,58,0.08)", border: "1px solid #dfe6e0", borderRadius: "12px" }}>
                           <p style={{ fontSize: "10px", color: "var(--muted)", margin: "0 0 6px" }}>SHARE LINK</p>
                           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                             <input
@@ -1366,7 +1365,6 @@ export default function Home() {
                   )}
                 </>
               )}
-              {tab === "log" && <Log onPhoto={usePhoto} notify={notify} recentFoods={recentFoods} savedProducts={savedProducts} onManual={openManualFood} onBarcode={() => setModal("barcode")} />}
               {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} weekLabel={groceryWeekLabel} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
               {tab === "recipes" && <RecipeCreator onLogRecipe={logRecipe} />}
               {tab === "progress" && <>
@@ -1391,7 +1389,7 @@ export default function Home() {
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} setTab={setTab} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} onSaveProfileDietary={saveProfileDietary} onSaveProfileNotifications={saveProfileNotifications} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} onManualSearch={(mode: "search" | "saved" | "custom") => openManualFood(mode)} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} onSaveProfileDietary={saveProfileDietary} onSaveProfileNotifications={saveProfileNotifications} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} />}
       <LegalFooter />
     </main>
   );

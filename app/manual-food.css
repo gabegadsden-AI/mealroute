@@ -24,8 +24,8 @@
 
 .manual-search input {
   min-width: 0;
-  border: 1px solid #354139;
-  background: #101512;
+  border: 1px solid #dfe6e0;
+  background: #ffffff;
   color: var(--text);
   border-radius: 11px;
   padding: 11px;
@@ -36,7 +36,7 @@
 .manual-search button {
   border: 1px solid var(--green);
   background: var(--green);
-  color: #112015;
+  color: #ffffff;
   border-radius: 11px;
   padding: 10px 13px;
   font-size: 9px;
@@ -44,9 +44,9 @@
 }
 
 .manual-search button:disabled {
-  border-color: #39433c;
-  background: #2e3831;
-  color: #7f8b82;
+  border-color: #dfe6e0;
+  background: #eef2ef;
+  color: #9aa49d;
 }
 
 .manual-result-list {
@@ -62,8 +62,8 @@
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  border: 1px solid #2d3830;
-  background: #171e19;
+  border: 1px solid #dfe6e0;
+  background: #f4f8f5;
   color: var(--text);
   border-radius: 13px;
   padding: 11px;
@@ -108,8 +108,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: #171e19;
-  border: 1px solid #2d3830;
+  background: #f4f8f5;
+  border: 1px solid #dfe6e0;
   border-radius: 13px;
   padding: 11px;
   margin-bottom: 11px;
@@ -144,8 +144,8 @@
 .manual-grams input,
 .manual-custom-form input {
   width: 100%;
-  border: 1px solid #354139;
-  background: #101512;
+  border: 1px solid #dfe6e0;
+  background: #ffffff;
   color: var(--text);
   border-radius: 10px;
   padding: 11px;
@@ -174,8 +174,8 @@
 }
 
 .manual-preview > div {
-  background: #171e19;
-  border: 1px solid #2d3830;
+  background: #f4f8f5;
+  border: 1px solid #dfe6e0;
   border-radius: 12px;
   padding: 10px;
   text-align: center;
@@ -221,7 +221,7 @@
 .manual-add-actions button {
   border: 1px solid var(--green);
   background: var(--green);
-  color: #112015;
+  color: #ffffff;
   border-radius: 12px;
   padding: 12px 9px;
   font-size: 9px;
@@ -229,14 +229,14 @@
 }
 
 .manual-add-actions button:last-child {
-  background: #171e19;
+  background: #f4f8f5;
   color: var(--green);
 }
 
 .manual-add-actions button:disabled {
-  border-color: #39433c;
-  background: #2e3831;
-  color: #7f8b82;
+  border-color: #dfe6e0;
+  background: #eef2ef;
+  color: #9aa49d;
 }
 
 .manual-custom-form {
@@ -270,9 +270,9 @@
 
 .manual-food-editor .auth-error {
   margin-top: 12px;
-  background: #341f1f;
-  border: 1px solid #65403d;
-  color: #f2aaa2;
+  background: #fdeeee;
+  border: 1px solid #e8b8b8;
+  color: #c14d43;
   border-radius: 12px;
   padding: 10px;
   font-size: 9px;
@@ -303,8 +303,8 @@
   aspect-ratio: 4 / 3;
   border-radius: 16px;
   overflow: hidden;
-  background: #0a0e0c;
-  border: 1px solid #2a3530;
+  background: #ffffff;
+  border: 1px solid #dfe6e0;
   margin: 12px 0;
 }
 
@@ -359,7 +359,7 @@
   background-position: center;
   border-radius: 12px;
   margin: 8px auto 12px;
-  border: 1px solid #2a3530;
+  border: 1px solid #dfe6e0;
 }
 
 .barcode-label-fields {
@@ -379,8 +379,8 @@
 .barcode-energy-row .segment button {
   padding: 11px 14px;
   font-size: 10px;
-  border: 1px solid #354139;
-  background: #101512;
+  border: 1px solid #dfe6e0;
+  background: #ffffff;
   color: var(--text);
   border-radius: 11px;
   cursor: pointer;
@@ -389,7 +389,7 @@
 .barcode-energy-row .segment button.active {
   border-color: var(--green);
   background: var(--green);
-  color: #112015;
+  color: #ffffff;
 }
 
 .barcode-macro-grid {
@@ -415,8 +415,8 @@
 
 .barcode-macro-grid input,
 .barcode-energy-row input {
-  border: 1px solid #354139;
-  background: #101512;
+  border: 1px solid #dfe6e0;
+  background: #ffffff;
   color: var(--text);
   border-radius: 11px;
   padding: 11px;
@@ -434,8 +434,8 @@
 }
 
 .barcode-label-fields .manual-custom-name input {
-  border: 1px solid #354139;
-  background: #101512;
+  border: 1px solid #dfe6e0;
+  background: #ffffff;
   color: var(--text);
   border-radius: 11px;
   padding: 11px;
@@ -467,7 +467,7 @@
   width: 100%;
   margin-top: 14px;
   background: transparent;
-  border: 1px solid #2d3830;
+  border: 1px solid #dfe6e0;
   color: var(--text);
   border-radius: 12px;
   padding: 11px;
@@ -506,8 +506,8 @@
 }
 
 .manual-fields input, .manual-fields select {
-  border: 1px solid #354139;
-  background: #101512;
+  border: 1px solid #dfe6e0;
+  background: #ffffff;
   color: var(--text);
   border-radius: 11px;
   padding: 11px;
@@ -528,8 +528,8 @@
 }
 
 .preview-box {
-  background: #171e19;
-  border: 1px solid #2d3830;
+  background: #f4f8f5;
+  border: 1px solid #dfe6e0;
   border-radius: 12px;
   padding: 11px;
   margin-top: 8px;
@@ -550,7 +550,7 @@
 .manual-actions .btn-primary {
   border: 1px solid var(--green);
   background: var(--green);
-  color: #112015;
+  color: #ffffff;
   border-radius: 12px;
   padding: 12px 9px;
   font-size: 9px;
@@ -559,14 +559,14 @@
 }
 
 .manual-actions .btn-primary:disabled {
-  border-color: #39433c;
-  background: #2e3831;
-  color: #7f8b82;
+  border-color: #dfe6e0;
+  background: #eef2ef;
+  color: #9aa49d;
 }
 
 .manual-actions .btn-secondary {
-  border: 1px solid #2d3830;
-  background: #171e19;
+  border: 1px solid #dfe6e0;
+  background: #f4f8f5;
   color: var(--green);
   border-radius: 12px;
   padding: 12px 9px;
@@ -576,16 +576,16 @@
 }
 
 .manual-actions .btn-secondary:disabled {
-  border-color: #39433c;
-  background: #2e3831;
-  color: #7f8b82;
+  border-color: #dfe6e0;
+  background: #eef2ef;
+  color: #9aa49d;
 }
 
 .lookup-error {
   margin-top: 10px;
-  background: #341f1f;
-  border: 1px solid #65403d;
-  color: #f2aaa2;
+  background: #fdeeee;
+  border: 1px solid #e8b8b8;
+  color: #c14d43;
   border-radius: 12px;
   padding: 10px;
   font-size: 9px;
@@ -612,7 +612,7 @@
   margin-top: 10px;
   padding: 14px;
   border-radius: 12px;
-  border: 1px solid #354139;
+  border: 1px solid #dfe6e0;
   background: rgba(255, 255, 255, 0.02);
 }
 
@@ -641,9 +641,9 @@
 .plan-picker-row select {
   padding: 8px 10px;
   border-radius: 8px;
-  border: 1px solid #2a2d2a;
-  background: var(--card, #1a1c1a);
-  color: var(--text, #f4f4f4);
+  border: 1px solid #f4f8f5;
+  background: var(--card, #ffffff);
+  color: var(--text, #1c2920);
   font-size: 13px;
 }
 
@@ -660,28 +660,28 @@
 .plan-picker-cancel {
   background: none;
   border: none;
-  color: var(--muted, #8b938b);
+  color: var(--muted, #6f7d74);
   font-size: 12px;
   cursor: pointer;
   padding: 6px 10px;
 }
 
 .plan-picker-cancel:hover {
-  color: var(--text, #f4f4f4);
+  color: var(--text, #1c2920);
 }
 
 .plan-picker-hint {
   display: block;
   margin-top: 6px;
   font-size: 11px;
-  color: var(--muted, #8b938b);
+  color: var(--muted, #6f7d74);
   line-height: 1.4;
 }
 
 /* Plan picker animation + active button */
 .plan-picker-open {
   animation: planPickerSlide 0.25s ease-out;
-  border-color: var(--green, #4CAF50);
+  border-color: var(--green, #4a8f3a);
 }
 
 @keyframes planPickerSlide {
@@ -691,26 +691,26 @@
 
 .btn-secondary.active {
   background: rgba(76, 175, 80, 0.12);
-  border-color: var(--green, #4CAF50);
-  color: var(--green, #4CAF50);
+  border-color: var(--green, #4a8f3a);
+  color: var(--green, #4a8f3a);
 }
 
 .btn-secondary.active,
 .btn-secondary.active:disabled {
   background: rgba(76, 175, 80, 0.12) !important;
-  border-color: var(--green, #4CAF50) !important;
-  color: var(--green, #4CAF50) !important;
+  border-color: var(--green, #4a8f3a) !important;
+  color: var(--green, #4a8f3a) !important;
   opacity: 1 !important;
 }
 
 /* Highlight for newly scheduled meal */
 .weekly-plan-meal.just-added {
   animation: mealFlash 1.2s ease-out 3;
-  border-color: var(--green, #4CAF50) !important;
+  border-color: var(--green, #4a8f3a) !important;
 }
 
 @keyframes mealFlash {
-  0% { box-shadow: 0 0 0 0 rgba(169, 244, 122, 0); }
-  30% { box-shadow: 0 0 0 3px rgba(169, 244, 122, 0.4); border-color: var(--green, #4CAF50); }
-  100% { box-shadow: 0 0 0 0 rgba(169, 244, 122, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(74, 143, 58, 0); }
+  30% { box-shadow: 0 0 0 3px rgba(74, 143, 58, 0.4); border-color: var(--green, #4a8f3a); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 143, 58, 0); }
 }

@@ -233,7 +233,7 @@ export function WeeklySummary({ profile }: { profile: MealRouteProfile | null })
             {summary.days.map((d) => {
               const isToday = d.date === localDateKey();
               return (
-                <tr key={d.date} style={{ borderBottom: "1px solid var(--line)", background: isToday ? "rgba(169,244,122,0.05)" : "transparent" }}>
+                <tr key={d.date} style={{ borderBottom: "1px solid var(--line)", background: isToday ? "rgba(74,143,58,0.05)" : "transparent" }}>
                   <td style={{ padding: "8px 6px", fontWeight: isToday ? 700 : 400 }}>{formatDate(d.date)}</td>
                   <td style={{ padding: "8px 6px", textAlign: "right" }}>{d.calories || "–"}</td>
                   <td style={{ padding: "8px 6px", textAlign: "right" }}>{d.protein ? `${d.protein}g` : "–"}</td>
@@ -313,34 +313,34 @@ function renderPrintable(summary: WeeklySummaryData, userName: string): string {
     </tr>`).join("");
 
   const weightRow = summary.weightChange !== null
-    ? `<p style="margin:12px 0 0;color:#666;">Weight: ${summary.startWeight}kg → ${summary.endWeight}kg (${summary.weightChange > 0 ? "+" : ""}${summary.weightChange}kg)</p>`
+    ? `<p style="margin:12px 0 0;color:#6f7d74;">Weight: ${summary.startWeight}kg → ${summary.endWeight}kg (${summary.weightChange > 0 ? "+" : ""}${summary.weightChange}kg)</p>`
     : "";
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>MealRoute Weekly Summary</title></head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
-  <div style="background:#f0fdf4;border-radius:12px;padding:24px;margin-bottom:20px;">
-    <h1 style="margin:0 0 4px;font-size:24px;color:#15803d;">📊 Your Weekly Summary</h1>
-    <p style="margin:0;color:#666;">${formatDate(summary.weekStart)} – ${formatDate(summary.weekEnd)}</p>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1c2920;">
+  <div style="background:#e8f4e4;border-radius:12px;padding:24px;margin-bottom:20px;">
+    <h1 style="margin:0 0 4px;font-size:24px;color:#4a8f3a;">📊 Your Weekly Summary</h1>
+    <p style="margin:0;color:#6f7d74;">${formatDate(summary.weekStart)} – ${formatDate(summary.weekEnd)}</p>
   </div>
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
     <div style="flex:1;min-width:120px;background:#f9fafb;border-radius:8px;padding:16px;text-align:center;">
-      <div style="font-size:28px;font-weight:700;color:#15803d;">${avg.calories}</div>
-      <div style="font-size:12px;color:#666;">Avg kcal/day</div>
+      <div style="font-size:28px;font-weight:700;color:#4a8f3a;">${avg.calories}</div>
+      <div style="font-size:12px;color:#6f7d74;">Avg kcal/day</div>
     </div>
     <div style="flex:1;min-width:120px;background:#f9fafb;border-radius:8px;padding:16px;text-align:center;">
-      <div style="font-size:28px;font-weight:700;color:#15803d;">${avg.protein}g</div>
-      <div style="font-size:12px;color:#666;">Avg protein/day</div>
+      <div style="font-size:28px;font-weight:700;color:#4a8f3a;">${avg.protein}g</div>
+      <div style="font-size:12px;color:#6f7d74;">Avg protein/day</div>
     </div>
     <div style="flex:1;min-width:120px;background:#f9fafb;border-radius:8px;padding:16px;text-align:center;">
-      <div style="font-size:28px;font-weight:700;color:#15803d;">${avg.waterMl}ml</div>
-      <div style="font-size:12px;color:#666;">Avg water/day</div>
+      <div style="font-size:28px;font-weight:700;color:#4a8f3a;">${avg.waterMl}ml</div>
+      <div style="font-size:12px;color:#6f7d74;">Avg water/day</div>
     </div>
   </div>
-  ${goalText ? `<p style="margin:0 0 16px;color:#666;">${goalText}</p>` : ""}
+  ${goalText ? `<p style="margin:0 0 16px;color:#6f7d74;">${goalText}</p>` : ""}
   ${weightRow}
   <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;">
-    <thead><tr style="background:#f0fdf4;">
+    <thead><tr style="background:#e8f4e4;">
       <th style="padding:8px;text-align:left;border-bottom:2px solid #ccc;">Day</th>
       <th style="padding:8px;text-align:right;border-bottom:2px solid #ccc;">Kcal</th>
       <th style="padding:8px;text-align:right;border-bottom:2px solid #ccc;">Protein</th>

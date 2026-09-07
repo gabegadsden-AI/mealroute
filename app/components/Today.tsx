@@ -73,14 +73,15 @@ export function Today({ meals, selectedDate, onSelectDate, consumed, protein, ca
       {showMicros && <MicronutrientGrid micros={micros} />}
       <div className="overview-actions">
         <button type="button" className="scan-meal" onClick={onLog}>
-          <span aria-hidden>+</span><b>Scan or log meal</b>
+          <b>Scan or log meal</b>
         </button>
         <button type="button" className="scan-barcode" onClick={onBarcode}>
           <svg aria-hidden width="16" height="14" viewBox="0 0 16 14" fill="none"><rect x="0" y="0" width="1.4" height="14" fill="currentColor" /><rect x="2.6" y="0" width="0.9" height="14" fill="currentColor" /><rect x="4.7" y="0" width="1.8" height="14" fill="currentColor" /><rect x="7.7" y="0" width="0.9" height="14" fill="currentColor" /><rect x="9.6" y="0" width="1.4" height="14" fill="currentColor" /><rect x="11.8" y="0" width="0.9" height="14" fill="currentColor" /><rect x="13.5" y="0" width="1.8" height="14" fill="currentColor" /></svg>
           <b>Scan barcode</b>
         </button>
         <button type="button" className="log-water" onClick={onWater} aria-label={`Water: ${water} of ${waterGoal} millilitres`}>
-          <span aria-hidden>♢</span><b>{(water / 1000).toFixed(1)} / {(waterGoal / 1000).toFixed(1)}L</b>
+          <span aria-hidden className="water-label">Water</span>
+          <b>{(water / 1000).toFixed(1)} / {(waterGoal / 1000).toFixed(1)}L</b>
         </button>
       </div>
     </section>

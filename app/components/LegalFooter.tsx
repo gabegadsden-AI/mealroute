@@ -10,14 +10,14 @@ export default function LegalFooter() {
       textAlign: "center",
       padding: "16px 0 8px",
       fontSize: "11px",
-      color: "#566158",
-      borderTop: "1px solid #1c2620",
+      color: "#9aa49d",
+      borderTop: "1px solid #dfe6e0",
       marginTop: "auto",
     }}>
       <span>© 2026 MealRoute · </span>
-      <a href="/terms" style={{ color: "#8e9a91", textDecoration: "none" }}>Terms</a>
+      <a href="/terms" style={{ color: "#6f7d74", textDecoration: "none" }}>Terms</a>
       <span> · </span>
-      <a href="/privacy" style={{ color: "#8e9a91", textDecoration: "none" }}>Privacy</a>
+      <a href="/privacy" style={{ color: "#6f7d74", textDecoration: "none" }}>Privacy</a>
     </footer>
   );
 }

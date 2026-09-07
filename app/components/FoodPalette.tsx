@@ -145,7 +145,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
     <div style={{ padding: "0 0 20px" }}>
       <div style={{ marginBottom: "20px" }}>
         <h2 style={{ fontSize: "20px", letterSpacing: "-.03em", margin: "0 0 4px" }}>My Foods</h2>
-        <p style={{ color: "#8e9a91", fontSize: "11px", margin: 0 }}>
+        <p style={{ color: "#6f7d74", fontSize: "11px", margin: 0 }}>
           Add foods you enjoy, then tap which meals each one belongs to. We&apos;ll use exactly those assignments to build your plan.
         </p>
       </div>
@@ -163,9 +163,9 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
               flex: 1,
               padding: "12px 14px",
               borderRadius: "14px",
-              border: "1px solid #2c352f",
-              background: "#111714",
-              color: "#f4f7f4",
+              border: "1px solid #dfe6e0",
+              background: "#ffffff",
+              color: "#1c2920",
               fontSize: "13px",
               outline: "none",
             }}
@@ -177,7 +177,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
               border: "none",
               borderRadius: "14px",
               background: "var(--green)",
-              color: "#101810",
+              color: "#ffffff",
               padding: "12px 18px",
               fontWeight: 700,
               fontSize: "12px",
@@ -191,13 +191,13 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
       </div>
 
       {error && (
-        <p style={{ color: "#ee9e78", fontSize: "11px", margin: "0 0 12px" }}>{error}</p>
+        <p style={{ color: "#c75b39", fontSize: "11px", margin: "0 0 12px" }}>{error}</p>
       )}
 
       {/* Search results */}
       {searchResults.length > 0 && (
         <div style={{ marginBottom: "24px" }}>
-          <p style={{ color: "#8e9a91", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".07em", margin: "0 0 10px" }}>
+          <p style={{ color: "#6f7d74", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".07em", margin: "0 0 10px" }}>
             Search Results — Tap + to add
           </p>
           {searchResults.map(result => (
@@ -209,8 +209,8 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                 gap: "12px",
                 padding: "10px",
                 marginBottom: "6px",
-                background: "#101512",
-                border: "1px solid #242c26",
+                background: "#ffffff",
+                border: "1px solid #dfe6e0",
                 borderRadius: "14px",
               }}
             >
@@ -218,7 +218,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                 <h4 style={{ fontSize: "12px", margin: "0 0 3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {result.name}
                 </h4>
-                <p style={{ color: "#98a49b", fontSize: "9px", margin: 0 }}>
+                <p style={{ color: "#6f7d74", fontSize: "9px", margin: 0 }}>
                   {result.caloriesPer100g} kcal / 100g · P {result.proteinPer100g}g · C {result.carbsPer100g}g · F {result.fatPer100g}g
                 </p>
               </div>
@@ -231,7 +231,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                   borderRadius: "10px",
                   border: "none",
                   background: "var(--green)",
-                  color: "#101810",
+                  color: "#ffffff",
                   fontSize: "18px",
                   fontWeight: 800,
                   display: "grid",
@@ -249,7 +249,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
 
       {/* Current palette */}
       <div>
-        <p style={{ color: "#8e9a91", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".07em", margin: "0 0 10px" }}>
+        <p style={{ color: "#6f7d74", fontSize: "9px", textTransform: "uppercase", letterSpacing: ".07em", margin: "0 0 10px" }}>
           Your Food Palette ({palette.length})
         </p>
 
@@ -257,9 +257,9 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
           <div style={{
             textAlign: "center",
             padding: "30px",
-            color: "#8e9a91",
+            color: "#6f7d74",
             fontSize: "12px",
-            border: "1px dashed #2c352f",
+            border: "1px dashed #dfe6e0",
             borderRadius: "16px",
           }}>
             No foods yet. Search above to add foods you enjoy.
@@ -275,7 +275,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
               style={{
                 marginBottom: "8px",
                 background: "var(--panel)",
-                border: `1px solid ${isExpanded ? "var(--green)" : isUnassigned ? "#ee9e78" : "#242d27"}`,
+                border: `1px solid ${isExpanded ? "var(--green)" : isUnassigned ? "#c75b39" : "#dfe6e0"}`,
                 borderRadius: "16px",
                 overflow: "hidden",
                 transition: "border-color .2s",
@@ -294,7 +294,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h4 style={{ fontSize: "12px", margin: "0 0 3px" }}>{food.foodName}</h4>
-                  <p style={{ color: isUnassigned ? "#ee9e78" : "#98a49b", fontSize: "9px", margin: 0 }}>
+                  <p style={{ color: isUnassigned ? "#c75b39" : "#6f7d74", fontSize: "9px", margin: 0 }}>
                     {food.caloriesPer100g} kcal / 100g
                     {" · "}
                     {food.preferredSlots.length === 0
@@ -319,9 +319,9 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                           placeItems: "center",
                           fontSize: "10px",
                           fontWeight: 700,
-                          background: active ? "rgba(169,244,122,0.15)" : "transparent",
-                          color: active ? "var(--green)" : "#465149",
-                          border: `1px solid ${active ? "var(--green)" : "#2c352f"}`,
+                          background: active ? "rgba(74,143,58,0.15)" : "transparent",
+                          color: active ? "var(--green)" : "#dfe6e0",
+                          border: `1px solid ${active ? "var(--green)" : "#dfe6e0"}`,
                         }}
                       >
                         {slot.charAt(0).toUpperCase()}
@@ -335,9 +335,9 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                     width: "28px",
                     height: "28px",
                     borderRadius: "10px",
-                    border: "1px solid #465149",
+                    border: "1px solid #dfe6e0",
                     background: "transparent",
-                    color: "#8e9a91",
+                    color: "#6f7d74",
                     fontSize: "14px",
                     display: "grid",
                     placeItems: "center",
@@ -353,11 +353,11 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
               {isExpanded && (
                 <div style={{
                   padding: "0 12px 14px",
-                  borderTop: "1px solid #242d27",
+                  borderTop: "1px solid #dfe6e0",
                   paddingTop: "14px",
                 }}>
                   <p style={{
-                    color: "#8e9a91",
+                    color: "#6f7d74",
                     fontSize: "9px",
                     textTransform: "uppercase",
                     letterSpacing: ".07em",
@@ -374,10 +374,10 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                           onClick={() => toggleSlot(food.id, slot)}
                           style={{
                             flex: 1,
-                            border: `1px solid ${active ? "var(--green)" : "#2c352f"}`,
+                            border: `1px solid ${active ? "var(--green)" : "#dfe6e0"}`,
                             borderRadius: "12px",
-                            background: active ? "rgba(169,244,122,0.12)" : "transparent",
-                            color: active ? "var(--green)" : "#8e9a91",
+                            background: active ? "rgba(74,143,58,0.12)" : "transparent",
+                            color: active ? "var(--green)" : "#6f7d74",
                             padding: "10px 6px",
                             fontSize: "10px",
                             fontWeight: 700,
@@ -391,7 +391,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                     })}
                   </div>
                   {isUnassigned && (
-                    <p style={{ color: "#ee9e78", fontSize: "9px", margin: "8px 0 0" }}>
+                    <p style={{ color: "#c75b39", fontSize: "9px", margin: "8px 0 0" }}>
                       Not assigned to any meal yet — tap Breakfast, Lunch, Dinner, or Snack above. This food won&apos;t appear in your plan until you assign it.
                     </p>
                   )}
@@ -408,15 +408,15 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
             padding: "14px",
             borderRadius: "16px",
             background: hasEnoughFoods && unassignedCount === 0
-              ? "linear-gradient(130deg,#1a241d,#101612)"
-              : "#101512",
-            border: `1px solid ${hasEnoughFoods && unassignedCount === 0 ? "#2d392f" : "#242c26"}`,
+              ? "linear-gradient(130deg,#ffffff,#f4f8f5)"
+              : "#ffffff",
+            border: `1px solid ${hasEnoughFoods && unassignedCount === 0 ? "#dfe6e0" : "#dfe6e0"}`,
             textAlign: "center",
           }}>
             <p style={{
               margin: 0,
               fontSize: "12px",
-              color: hasEnoughFoods && unassignedCount === 0 ? "var(--green)" : "#8e9a91",
+              color: hasEnoughFoods && unassignedCount === 0 ? "var(--green)" : "#6f7d74",
               fontWeight: 600,
             }}>
               {!hasEnoughFoods

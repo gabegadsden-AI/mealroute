@@ -70,9 +70,9 @@ function dateLabel(dateStr: string) {
 
 function calorieColor(actual: number, target: number) {
   const pct = (actual / target) * 100;
-  if (pct >= 85 && pct <= 115) return "#a9f47a";
-  if (pct >= 70 && pct <= 130) return "#f0a467";
-  return "#ee9e78";
+  if (pct >= 85 && pct <= 115) return "#4a8f3a";
+  if (pct >= 70 && pct <= 130) return "#9d611c";
+  return "#c75b39";
 }
 
 const round1 = (v: number) => Math.round((v + Number.EPSILON) * 10) / 10;
@@ -179,8 +179,8 @@ export default function PlanReview({
     <div className="plan-review-overlay" style={{ padding: "0 0 40px" }}>
       <div className="plan-review-header" style={{ textAlign: "center", marginBottom: "24px" }}>
         <h2 style={{ fontSize: "24px", letterSpacing: "-.04em", margin: "0 0 6px" }}>Your AI-Generated Plan</h2>
-        <p style={{ color: "#8e9a91", fontSize: "12px", margin: 0 }}>
-          Tap <strong style={{ color: "#a9f47a" }}>Swap</strong> to switch foods for any day. Tap <strong style={{ color: "#ee9e78" }}>Remove</strong> to skip an item.
+        <p style={{ color: "#6f7d74", fontSize: "12px", margin: 0 }}>
+          Tap <strong style={{ color: "#4a8f3a" }}>Swap</strong> to switch foods for any day. Tap <strong style={{ color: "#c75b39" }}>Remove</strong> to skip an item.
         </p>
       </div>
 
@@ -200,18 +200,18 @@ export default function PlanReview({
               }}
             >
               <h3 style={{ fontSize: "16px", margin: 0 }}>{dateLabel(date)}</h3>
-              <div style={{ display: "flex", gap: "12px", fontSize: "10px", color: "#8e9a91" }}>
+              <div style={{ display: "flex", gap: "12px", fontSize: "10px", color: "#6f7d74" }}>
                 <span>
                   <strong style={{ color: calColor }}>{totals.calories}</strong> / {calorieGoal} kcal
                 </span>
                 <span>
-                  P: <strong style={{ color: "#f4f7f4" }}>{totals.protein}g</strong>
+                  P: <strong style={{ color: "#1c2920" }}>{totals.protein}g</strong>
                 </span>
                 <span>
-                  C: <strong style={{ color: "#f4f7f4" }}>{totals.carbs}g</strong>
+                  C: <strong style={{ color: "#1c2920" }}>{totals.carbs}g</strong>
                 </span>
                 <span>
-                  F: <strong style={{ color: "#f4f7f4" }}>{totals.fat}g</strong>
+                  F: <strong style={{ color: "#1c2920" }}>{totals.fat}g</strong>
                 </span>
               </div>
             </div>
@@ -232,8 +232,8 @@ export default function PlanReview({
                   key={slot}
                   style={{
                     marginBottom: "10px",
-                    background: "#101512",
-                    border: "1px solid #242c26",
+                    background: "#ffffff",
+                    border: "1px solid #dfe6e0",
                     borderRadius: "16px",
                     overflow: "hidden",
                   }}
@@ -245,7 +245,7 @@ export default function PlanReview({
                       alignItems: "center",
                       justifyContent: "space-between",
                       padding: "10px 14px",
-                      borderBottom: "1px solid #1c2620",
+                      borderBottom: "1px solid #dfe6e0",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -255,13 +255,13 @@ export default function PlanReview({
                           fontSize: "12px",
                           textTransform: "uppercase",
                           letterSpacing: ".07em",
-                          color: "#a9f47a",
+                          color: "#4a8f3a",
                         }}
                       >
                         {slotLabels[slot]}
                       </strong>
                     </div>
-                    <span style={{ fontSize: "10px", color: "#8e9a91" }}>
+                    <span style={{ fontSize: "10px", color: "#6f7d74" }}>
                       {slotCalories} kcal · {Math.round(slotProtein)}g protein · {slotEntries.length}{" "}
                       {slotEntries.length === 1 ? "item" : "items"}
                     </span>
@@ -282,7 +282,7 @@ export default function PlanReview({
                             alignItems: "center",
                             gap: "10px",
                             padding: "10px 14px",
-                            borderBottom: isSwapping ? "none" : "1px solid #1c2620",
+                            borderBottom: isSwapping ? "none" : "1px solid #dfe6e0",
                             opacity: rejected ? 0.45 : 1,
                             transition: "opacity .2s",
                           }}
@@ -294,8 +294,8 @@ export default function PlanReview({
                               borderRadius: "8px",
                               display: "grid",
                               placeItems: "center",
-                              background: rejected ? "#3a2a22" : "#193423",
-                              color: rejected ? "#ee9e78" : "#a9f47a",
+                              background: rejected ? "#fdeee0" : "#e8f4e4",
+                              color: rejected ? "#c75b39" : "#4a8f3a",
                               fontSize: "12px",
                               flex: "0 0 28px",
                             }}
@@ -315,7 +315,7 @@ export default function PlanReview({
                             >
                               {meal.foodName}
                             </h4>
-                            <p style={{ color: "#98a49b", fontSize: "9px", margin: 0 }}>
+                            <p style={{ color: "#6f7d74", fontSize: "9px", margin: 0 }}>
                               {meal.grams}g · <b>{meal.calories} kcal</b> · P {meal.protein}g · C {meal.carbs}g · F {meal.fat}g
                             </p>
                           </div>
@@ -324,10 +324,10 @@ export default function PlanReview({
                               <button
                                 onClick={() => setSwappingKey(isSwapping ? null : key)}
                                 style={{
-                                  border: `1px solid ${isSwapping ? "#a9f47a" : "#465149"}`,
+                                  border: `1px solid ${isSwapping ? "#4a8f3a" : "#dfe6e0"}`,
                                   borderRadius: "8px",
-                                  background: isSwapping ? "rgba(169,244,122,0.15)" : "transparent",
-                                  color: isSwapping ? "#a9f47a" : "#8e9a91",
+                                  background: isSwapping ? "rgba(74,143,58,0.15)" : "transparent",
+                                  color: isSwapping ? "#4a8f3a" : "#6f7d74",
                                   padding: "4px 8px",
                                   fontSize: "9px",
                                   fontWeight: 600,
@@ -339,10 +339,10 @@ export default function PlanReview({
                               <button
                                 onClick={() => toggleReject(key)}
                                 style={{
-                                  border: "1px solid #465149",
+                                  border: "1px solid #dfe6e0",
                                   borderRadius: "8px",
                                   background: "transparent",
-                                  color: "#8e9a91",
+                                  color: "#6f7d74",
                                   padding: "4px 8px",
                                   fontSize: "9px",
                                   fontWeight: 600,
@@ -357,10 +357,10 @@ export default function PlanReview({
                             <button
                               onClick={() => toggleReject(key)}
                               style={{
-                                border: "1px solid #ee9e78",
+                                border: "1px solid #c75b39",
                                 borderRadius: "8px",
-                                background: "rgba(238,158,120,0.15)",
-                                color: "#ee9e78",
+                                background: "rgba(199,91,57,0.15)",
+                                color: "#c75b39",
                                 padding: "4px 8px",
                                 fontSize: "9px",
                                 fontWeight: 600,
@@ -377,14 +377,14 @@ export default function PlanReview({
                           <div
                             style={{
                               padding: "8px 14px 12px",
-                              borderBottom: "1px solid #1c2620",
-                              background: "#0d100e",
+                              borderBottom: "1px solid #dfe6e0",
+                              background: "#f4f8f5",
                             }}
                           >
                             <p
                               style={{
                                 fontSize: "10px",
-                                color: "#8e9a91",
+                                color: "#6f7d74",
                                 margin: "0 0 8px",
                                 textTransform: "uppercase",
                                 letterSpacing: ".05em",
@@ -393,7 +393,7 @@ export default function PlanReview({
                               Swap with another {slotLabels[slot].toLowerCase()} food
                             </p>
                             {swapOptions.length === 0 ? (
-                              <p style={{ fontSize: "11px", color: "#8e9a91", margin: 0, fontStyle: "italic" }}>
+                              <p style={{ fontSize: "11px", color: "#6f7d74", margin: 0, fontStyle: "italic" }}>
                                 No other foods assigned to {slotLabels[slot].toLowerCase()}. Add more in My Foods.
                               </p>
                             ) : (
@@ -408,9 +408,9 @@ export default function PlanReview({
                                       alignItems: "center",
                                       padding: "8px 12px",
                                       borderRadius: "10px",
-                                      border: "1px solid #242c26",
-                                      background: "#101512",
-                                      color: "#f4f7f4",
+                                      border: "1px solid #dfe6e0",
+                                      background: "#ffffff",
+                                      color: "#1c2920",
                                       cursor: "pointer",
                                       textAlign: "left",
                                     }}
@@ -418,11 +418,11 @@ export default function PlanReview({
                                     <div>
                                       <strong style={{ fontSize: "11px" }}>{food.food_name}</strong>
                                       <br />
-                                      <span style={{ fontSize: "9px", color: "#8e9a91" }}>
+                                      <span style={{ fontSize: "9px", color: "#6f7d74" }}>
                                         {Math.round(food.calories_per_100g)} kcal/100g · P {Math.round(food.protein_per_100g)}g · C {Math.round(food.carbs_per_100g)}g · F {Math.round(food.fat_per_100g)}g
                                       </span>
                                     </div>
-                                    <span style={{ color: "#a9f47a", fontSize: "12px" }}>→</span>
+                                    <span style={{ color: "#4a8f3a", fontSize: "12px" }}>→</span>
                                   </button>
                                 ))}
                               </div>
@@ -455,10 +455,10 @@ export default function PlanReview({
           onClick={onReject}
           style={{
             flex: 1,
-            border: "1px solid #2c352f",
+            border: "1px solid #dfe6e0",
             borderRadius: "16px",
             background: "var(--panel-2)",
-            color: "#8e9a91",
+            color: "#6f7d74",
             padding: "14px",
             fontWeight: 700,
             fontSize: "13px",
@@ -473,11 +473,11 @@ export default function PlanReview({
             border: "none",
             borderRadius: "16px",
             background: "var(--green)",
-            color: "#101810",
+            color: "#ffffff",
             padding: "14px",
             fontWeight: 800,
             fontSize: "13px",
-            boxShadow: "0 6px 20px #a9f47a30",
+            boxShadow: "0 6px 20px #4a8f3a30",
           }}
         >
           Accept Plan ({acceptedMeals.length} meals)

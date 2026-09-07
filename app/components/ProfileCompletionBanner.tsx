@@ -33,8 +33,8 @@ export default function ProfileCompletionBanner({ hasCalorieGoal, hasMacroGoals,
         padding: "12px 14px",
         marginBottom: "16px",
         borderRadius: "14px",
-        background: "linear-gradient(135deg, #1a1710, #141210)",
-        border: "1px solid #ee9e78",
+        background: "linear-gradient(135deg, #fff8e9, #fdf3e2)",
+        border: "1px solid #c75b39",
       }}
     >
       <span
@@ -53,7 +53,7 @@ export default function ProfileCompletionBanner({ hasCalorieGoal, hasMacroGoals,
             margin: "0 0 2px",
             fontSize: "12px",
             fontWeight: 700,
-            color: "#ee9e78",
+            color: "#c75b39",
             letterSpacing: "-0.01em",
           }}
         >
@@ -63,7 +63,7 @@ export default function ProfileCompletionBanner({ hasCalorieGoal, hasMacroGoals,
           style={{
             margin: "0 0 8px",
             fontSize: "11px",
-            color: "#b8a898",
+            color: "#887351",
             lineHeight: 1.5,
           }}
         >
@@ -76,10 +76,10 @@ export default function ProfileCompletionBanner({ hasCalorieGoal, hasMacroGoals,
             onOpenGoals();
           }}
           style={{
-            border: "1px solid #ee9e78",
+            border: "1px solid #c75b39",
             borderRadius: "10px",
             background: "rgba(238, 158, 120, 0.12)",
-            color: "#ee9e78",
+            color: "#c75b39",
             padding: "6px 14px",
             fontSize: "11px",
             fontWeight: 700,
@@ -95,7 +95,7 @@ export default function ProfileCompletionBanner({ hasCalorieGoal, hasMacroGoals,
         style={{
           border: "none",
           background: "transparent",
-          color: "#8e9a91",
+          color: "#6f7d74",
           fontSize: "14px",
           cursor: "pointer",
           padding: "0",
