@@ -70,7 +70,7 @@ function dateLabel(dateStr: string) {
 
 function calorieColor(actual: number, target: number) {
   const pct = (actual / target) * 100;
-  if (pct >= 85 && pct <= 115) return "#4a8f3a";
+  if (pct >= 85 && pct <= 115) return "#5db04d";
   if (pct >= 70 && pct <= 130) return "#9d611c";
   return "#c75b39";
 }
@@ -180,7 +180,7 @@ export default function PlanReview({
       <div className="plan-review-header" style={{ textAlign: "center", marginBottom: "24px" }}>
         <h2 style={{ fontSize: "24px", letterSpacing: "-.04em", margin: "0 0 6px" }}>Your AI-Generated Plan</h2>
         <p style={{ color: "#6f7d74", fontSize: "12px", margin: 0 }}>
-          Tap <strong style={{ color: "#4a8f3a" }}>Swap</strong> to switch foods for any day. Tap <strong style={{ color: "#c75b39" }}>Remove</strong> to skip an item.
+          Tap <strong style={{ color: "var(--green-text)" }}>Swap</strong> to switch foods for any day. Tap <strong style={{ color: "#c75b39" }}>Remove</strong> to skip an item.
         </p>
       </div>
 
@@ -255,7 +255,7 @@ export default function PlanReview({
                           fontSize: "12px",
                           textTransform: "uppercase",
                           letterSpacing: ".07em",
-                          color: "#4a8f3a",
+                          color: "var(--green-text)",
                         }}
                       >
                         {slotLabels[slot]}
@@ -295,7 +295,7 @@ export default function PlanReview({
                               display: "grid",
                               placeItems: "center",
                               background: rejected ? "#fdeee0" : "#e8f4e4",
-                              color: rejected ? "#c75b39" : "#4a8f3a",
+                              color: rejected ? "#c75b39" : "#5db04d",
                               fontSize: "12px",
                               flex: "0 0 28px",
                             }}
@@ -324,10 +324,10 @@ export default function PlanReview({
                               <button
                                 onClick={() => setSwappingKey(isSwapping ? null : key)}
                                 style={{
-                                  border: `1px solid ${isSwapping ? "#4a8f3a" : "#dfe6e0"}`,
+                                  border: `1px solid ${isSwapping ? "#5db04d" : "#dfe6e0"}`,
                                   borderRadius: "8px",
                                   background: isSwapping ? "rgba(74,143,58,0.15)" : "transparent",
-                                  color: isSwapping ? "#4a8f3a" : "#6f7d74",
+                                  color: isSwapping ? "#5db04d" : "#6f7d74",
                                   padding: "4px 8px",
                                   fontSize: "9px",
                                   fontWeight: 600,
@@ -422,7 +422,7 @@ export default function PlanReview({
                                         {Math.round(food.calories_per_100g)} kcal/100g · P {Math.round(food.protein_per_100g)}g · C {Math.round(food.carbs_per_100g)}g · F {Math.round(food.fat_per_100g)}g
                                       </span>
                                     </div>
-                                    <span style={{ color: "#4a8f3a", fontSize: "12px" }}>→</span>
+                                    <span style={{ color: "var(--green-text)", fontSize: "12px" }}>→</span>
                                   </button>
                                 ))}
                               </div>
@@ -473,11 +473,11 @@ export default function PlanReview({
             border: "none",
             borderRadius: "16px",
             background: "var(--green)",
-            color: "#ffffff",
+            color: "#1c2920",
             padding: "14px",
             fontWeight: 800,
             fontSize: "13px",
-            boxShadow: "0 6px 20px #4a8f3a30",
+            boxShadow: "0 6px 20px #5db04d30",
           }}
         >
           Accept Plan ({acceptedMeals.length} meals)

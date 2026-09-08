@@ -28,8 +28,8 @@ const styles = {
     width: "44px",
     height: "44px",
     borderRadius: "10px",
-    background: "#4a8f3a",
-    color: "#ffffff",
+    background: "#5db04d",
+    color: "#1c2920",
     display: "flex" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
@@ -89,7 +89,7 @@ const styles = {
     margin: 0,
   },
   arrow: {
-    color: "#4a8f3a",
+    color: "var(--green-text)",
     fontSize: "14px",
     marginTop: "8px",
     display: "block" as const,
@@ -103,7 +103,7 @@ const styles = {
     textAlign: "center" as const,
   },
   footerLink: {
-    color: "#4a8f3a",
+    color: "var(--green-text)",
     textDecoration: "none",
     fontSize: "13px",
   },

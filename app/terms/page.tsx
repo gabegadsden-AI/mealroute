@@ -28,8 +28,8 @@ const styles = {
     width: "44px",
     height: "44px",
     borderRadius: "10px",
-    background: "#4a8f3a",
-    color: "#ffffff",
+    background: "#5db04d",
+    color: "#1c2920",
     display: "flex" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
@@ -92,10 +92,10 @@ const styles = {
     marginBottom: "6px",
   },
   accent: {
-    color: "#4a8f3a",
+    color: "var(--green-text)",
   },
   link: {
-    color: "#4a8f3a",
+    color: "var(--green-text)",
     textDecoration: "none",
   },
   divider: {
@@ -113,7 +113,7 @@ const styles = {
     textAlign: "center" as const,
   },
   footerLink: {
-    color: "#4a8f3a",
+    color: "var(--green-text)",
     textDecoration: "none",
     fontSize: "13px",
   },

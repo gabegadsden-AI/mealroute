@@ -281,7 +281,7 @@ export function WeeklySummary({ profile }: { profile: MealRouteProfile | null })
             borderRadius: "12px",
             border: "1px solid var(--green)",
             background: "transparent",
-            color: "var(--green)",
+            color: "var(--green-text)",
             fontSize: "11px",
             fontWeight: 700,
             opacity: sharing ? 0.6 : 1,
@@ -320,20 +320,20 @@ function renderPrintable(summary: WeeklySummaryData, userName: string): string {
 <html><head><meta charset="utf-8"><title>MealRoute Weekly Summary</title></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#1c2920;">
   <div style="background:#e8f4e4;border-radius:12px;padding:24px;margin-bottom:20px;">
-    <h1 style="margin:0 0 4px;font-size:24px;color:#4a8f3a;">📊 Your Weekly Summary</h1>
+    <h1 style="margin:0 0 4px;font-size:24px;color:#3e8033;">📊 Your Weekly Summary</h1>
     <p style="margin:0;color:#6f7d74;">${formatDate(summary.weekStart)} – ${formatDate(summary.weekEnd)}</p>
   </div>
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
     <div style="flex:1;min-width:120px;background:#f9fafb;border-radius:8px;padding:16px;text-align:center;">
-      <div style="font-size:28px;font-weight:700;color:#4a8f3a;">${avg.calories}</div>
+      <div style="font-size:28px;font-weight:700;color:#3e8033;">${avg.calories}</div>
       <div style="font-size:12px;color:#6f7d74;">Avg kcal/day</div>
     </div>
     <div style="flex:1;min-width:120px;background:#f9fafb;border-radius:8px;padding:16px;text-align:center;">
-      <div style="font-size:28px;font-weight:700;color:#4a8f3a;">${avg.protein}g</div>
+      <div style="font-size:28px;font-weight:700;color:#3e8033;">${avg.protein}g</div>
       <div style="font-size:12px;color:#6f7d74;">Avg protein/day</div>
     </div>
     <div style="flex:1;min-width:120px;background:#f9fafb;border-radius:8px;padding:16px;text-align:center;">
-      <div style="font-size:28px;font-weight:700;color:#4a8f3a;">${avg.waterMl}ml</div>
+      <div style="font-size:28px;font-weight:700;color:#3e8033;">${avg.waterMl}ml</div>
       <div style="font-size:12px;color:#6f7d74;">Avg water/day</div>
     </div>
   </div>

@@ -336,7 +336,7 @@ export function RecipeCreator({ onLogRecipe }: { onLogRecipe: (recipe: Recipe) =
                     <p style={{ color: "var(--muted)", fontSize: "10px", margin: "8px 0 0" }}>{recipe.description}</p>
                   )}
                   <div className="plan-actions" style={{ marginTop: "10px" }}>
-                    <button onClick={() => onLogRecipe(recipe)} style={{ color: "var(--green)" }}>＋ Log serving</button>
+                    <button onClick={() => onLogRecipe(recipe)} style={{ color: "var(--green-text)" }}>＋ Log serving</button>
                     <button onClick={() => startEdit(recipe)}>Edit</button>
                     <button onClick={() => handleDelete(recipe.id)} style={{ color: "#c14d43" }}>Delete</button>
                   </div>
@@ -347,7 +347,7 @@ export function RecipeCreator({ onLogRecipe }: { onLogRecipe: (recipe: Recipe) =
         )}
 
         {toast && (
-          <div style={{ position: "fixed", bottom: "100px", left: "50%", transform: "translateX(-50%)", background: "var(--green-dark)", color: "var(--green)", padding: "10px 20px", borderRadius: "12px", fontSize: "12px", zIndex: 50 }}>
+          <div style={{ position: "fixed", bottom: "100px", left: "50%", transform: "translateX(-50%)", background: "var(--green-dark)", color: "var(--green-text)", padding: "10px 20px", borderRadius: "12px", fontSize: "12px", zIndex: 50 }}>
             {toast}
           </div>
         )}
@@ -418,7 +418,7 @@ export function RecipeCreator({ onLogRecipe }: { onLogRecipe: (recipe: Recipe) =
                 borderRadius: "12px",
                 border: "1px solid var(--green)",
                 background: "transparent",
-                color: "var(--green)",
+                color: "var(--green-text)",
                 fontSize: "11px",
                 fontWeight: 700,
                 opacity: searching || searchQuery.trim().length < 2 ? 0.5 : 1,
@@ -544,7 +544,7 @@ export function RecipeCreator({ onLogRecipe }: { onLogRecipe: (recipe: Recipe) =
       </section>
 
       {toast && (
-        <div style={{ position: "fixed", bottom: "100px", left: "50%", transform: "translateX(-50%)", background: "var(--green-dark)", color: "var(--green)", padding: "10px 20px", borderRadius: "12px", fontSize: "12px", zIndex: 50 }}>
+        <div style={{ position: "fixed", bottom: "100px", left: "50%", transform: "translateX(-50%)", background: "var(--green-dark)", color: "var(--green-text)", padding: "10px 20px", borderRadius: "12px", fontSize: "12px", zIndex: 50 }}>
           {toast}
         </div>
       )}

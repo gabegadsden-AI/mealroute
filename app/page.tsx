@@ -1254,13 +1254,13 @@ export default function Home() {
                       flex: 1, padding: "10px", borderRadius: "12px", fontSize: "11px", fontWeight: 700,
                       border: planSubView === "week" ? "1px solid var(--green)" : "1px solid #dfe6e0",
                       background: planSubView === "week" ? "rgba(74,143,58,0.1)" : "transparent",
-                      color: planSubView === "week" ? "var(--green)" : "#6f7d74",
+                      color: planSubView === "week" ? "var(--green-text)" : "#6f7d74",
                     }} onClick={() => setPlanSubView("week")}>Weekly Plan</button>
                     <button className={planSubView === "palette" ? "active" : ""} style={{
                       flex: 1, padding: "10px", borderRadius: "12px", fontSize: "11px", fontWeight: 700,
                       border: planSubView === "palette" ? "1px solid var(--green)" : "1px solid #dfe6e0",
                       background: planSubView === "palette" ? "rgba(74,143,58,0.1)" : "transparent",
-                      color: planSubView === "palette" ? "var(--green)" : "#6f7d74",
+                      color: planSubView === "palette" ? "var(--green-text)" : "#6f7d74",
                     }} onClick={() => setPlanSubView("palette")}>My Foods ({foodPalette.length})</button>
                   </div>
                   {planSubView === "week" && (
@@ -1285,7 +1285,7 @@ export default function Home() {
                               flex: 1, padding: "12px", borderRadius: "14px", fontSize: "12px", fontWeight: 700,
                               border: foodPalette.length < 3 ? "1px solid #dfe6e0" : "none",
                               background: foodPalette.length < 3 ? "transparent" : "var(--green)",
-                              color: foodPalette.length < 3 ? "#9aa49d" : "#ffffff",
+                              color: foodPalette.length < 3 ? "#9aa49d" : "#1c2920",
                               opacity: generatingPlan ? 0.6 : 1,
                             }}>{generatingPlan ? "..." : `${d} days`}</button>
                           ))}
@@ -1318,11 +1318,11 @@ export default function Home() {
                               readOnly
                               value={shareUrl}
                               onClick={(e) => (e.target as HTMLInputElement).select()}
-                              style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--panel)", color: "var(--green)", fontSize: "11px" }}
+                              style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--panel)", color: "var(--green-text)", fontSize: "11px" }}
                             />
                             <button
                               onClick={() => { navigator.clipboard.writeText(shareUrl); notify("Link copied! 📋"); }}
-                              style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--green)", background: "transparent", color: "var(--green)", fontSize: "11px", fontWeight: 700 }}
+                              style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--green)", background: "transparent", color: "var(--green-text)", fontSize: "11px", fontWeight: 700 }}
                             >
                               Copy
                             </button>

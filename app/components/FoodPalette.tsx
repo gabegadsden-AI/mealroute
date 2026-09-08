@@ -177,7 +177,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
               border: "none",
               borderRadius: "14px",
               background: "var(--green)",
-              color: "#ffffff",
+              color: "#1c2920",
               padding: "12px 18px",
               fontWeight: 700,
               fontSize: "12px",
@@ -231,7 +231,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                   borderRadius: "10px",
                   border: "none",
                   background: "var(--green)",
-                  color: "#ffffff",
+                  color: "#1c2920",
                   fontSize: "18px",
                   fontWeight: 800,
                   display: "grid",
@@ -320,7 +320,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                           fontSize: "10px",
                           fontWeight: 700,
                           background: active ? "rgba(74,143,58,0.15)" : "transparent",
-                          color: active ? "var(--green)" : "#dfe6e0",
+                          color: active ? "var(--green-text)" : "#dfe6e0",
                           border: `1px solid ${active ? "var(--green)" : "#dfe6e0"}`,
                         }}
                       >
@@ -377,7 +377,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
                             border: `1px solid ${active ? "var(--green)" : "#dfe6e0"}`,
                             borderRadius: "12px",
                             background: active ? "rgba(74,143,58,0.12)" : "transparent",
-                            color: active ? "var(--green)" : "#6f7d74",
+                            color: active ? "var(--green-text)" : "#6f7d74",
                             padding: "10px 6px",
                             fontSize: "10px",
                             fontWeight: 700,
@@ -416,7 +416,7 @@ export default function FoodPalette({ palette, onAdd, onDelete, onUpdateSlots }:
             <p style={{
               margin: 0,
               fontSize: "12px",
-              color: hasEnoughFoods && unassignedCount === 0 ? "var(--green)" : "#6f7d74",
+              color: hasEnoughFoods && unassignedCount === 0 ? "var(--green-text)" : "#6f7d74",
               fontWeight: 600,
             }}>
               {!hasEnoughFoods

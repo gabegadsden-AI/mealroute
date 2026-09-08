@@ -35,7 +35,7 @@ export default async function SharedPlanPage({ params }: { params: Promise<{ tok
             This shared meal plan link may have expired or been deleted.
           </p>
           <p style={{ marginTop: "24px" }}>
-            <a href="/" style={{ color: "#4a8f3a", textDecoration: "none", fontSize: "13px" }}>
+            <a href="/" style={{ color: "var(--green-text)", textDecoration: "none", fontSize: "13px" }}>
               → Go to MealRoute
             </a>
           </p>
@@ -56,7 +56,7 @@ export default async function SharedPlanPage({ params }: { params: Promise<{ tok
         {/* Header */}
         <div style={{ background: "linear-gradient(145deg,#ffffff,#f4f8f5 68%)", border: "1px solid #dfe6e0", borderRadius: "20px", padding: "24px", marginBottom: "20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-            <div style={{ background: "#4a8f3a", color: "#ffffff", width: "38px", height: "38px", borderRadius: "12px", display: "grid", placeItems: "center", fontWeight: 950, fontSize: "21px", transform: "rotate(-4deg)" }}>M</div>
+            <div style={{ background: "#5db04d", color: "#1c2920", width: "38px", height: "38px", borderRadius: "12px", display: "grid", placeItems: "center", fontWeight: 950, fontSize: "21px", transform: "rotate(-4deg)" }}>M</div>
             <span style={{ color: "#6f7d74", fontSize: "10px", fontWeight: 700, letterSpacing: "0.16em" }}>SHARED MEAL PLAN</span>
           </div>
           <h1 style={{ fontSize: "24px", margin: "8px 0 4px", letterSpacing: "-0.03em" }}>{plan.planTitle}</h1>
@@ -70,19 +70,19 @@ export default async function SharedPlanPage({ params }: { params: Promise<{ tok
         {/* Totals */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "10px", marginBottom: "24px" }}>
           <div style={{ background: "#ffffff", border: "1px solid #dfe6e0", borderRadius: "12px", padding: "14px", textAlign: "center" }}>
-            <div style={{ fontSize: "22px", fontWeight: 700, color: "#4a8f3a" }}>{totalCalories.toLocaleString()}</div>
+            <div style={{ fontSize: "22px", fontWeight: 700, color: "var(--green-text)" }}>{totalCalories.toLocaleString()}</div>
             <div style={{ fontSize: "10px", color: "#6f7d74" }}>Total kcal</div>
           </div>
           <div style={{ background: "#ffffff", border: "1px solid #dfe6e0", borderRadius: "12px", padding: "14px", textAlign: "center" }}>
-            <div style={{ fontSize: "22px", fontWeight: 700, color: "#4a8f3a" }}>{Math.round(totalProtein)}g</div>
+            <div style={{ fontSize: "22px", fontWeight: 700, color: "var(--green-text)" }}>{Math.round(totalProtein)}g</div>
             <div style={{ fontSize: "10px", color: "#6f7d74" }}>Protein</div>
           </div>
           <div style={{ background: "#ffffff", border: "1px solid #dfe6e0", borderRadius: "12px", padding: "14px", textAlign: "center" }}>
-            <div style={{ fontSize: "22px", fontWeight: 700, color: "#4a8f3a" }}>{Math.round(totalCarbs)}g</div>
+            <div style={{ fontSize: "22px", fontWeight: 700, color: "var(--green-text)" }}>{Math.round(totalCarbs)}g</div>
             <div style={{ fontSize: "10px", color: "#6f7d74" }}>Carbs</div>
           </div>
           <div style={{ background: "#ffffff", border: "1px solid #dfe6e0", borderRadius: "12px", padding: "14px", textAlign: "center" }}>
-            <div style={{ fontSize: "22px", fontWeight: 700, color: "#4a8f3a" }}>{Math.round(totalFat)}g</div>
+            <div style={{ fontSize: "22px", fontWeight: 700, color: "var(--green-text)" }}>{Math.round(totalFat)}g</div>
             <div style={{ fontSize: "10px", color: "#6f7d74" }}>Fat</div>
           </div>
         </div>
@@ -90,7 +90,7 @@ export default async function SharedPlanPage({ params }: { params: Promise<{ tok
         {/* Meals grouped by day */}
         {grouped.map(([date, meals]) => (
           <div key={date} style={{ marginBottom: "24px" }}>
-            <h2 style={{ fontSize: "16px", marginBottom: "12px", color: "#4a8f3a" }}>
+            <h2 style={{ fontSize: "16px", marginBottom: "12px", color: "var(--green-text)" }}>
               {date === "Unscheduled" ? "Unscheduled" : formatDate(date)}
             </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -108,7 +108,7 @@ export default async function SharedPlanPage({ params }: { params: Promise<{ tok
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {meal.mealSlot && (
-                        <span style={{ color: "#4a8f3a", background: "#e8f4e4", fontSize: "8px", padding: "3px 6px", borderRadius: "20px", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                        <span style={{ color: "var(--green-text)", background: "#e8f4e4", fontSize: "8px", padding: "3px 6px", borderRadius: "20px", textTransform: "uppercase", letterSpacing: "0.07em" }}>
                           {mealSlotLabels[meal.mealSlot as keyof typeof mealSlotLabels] || meal.mealSlot}
                         </span>
                       )}
@@ -137,10 +137,10 @@ export default async function SharedPlanPage({ params }: { params: Promise<{ tok
         {/* Footer */}
         <div style={{ marginTop: "32px", textAlign: "center", paddingBottom: "40px" }}>
           <p style={{ color: "#6f7d74", fontSize: "12px" }}>
-            Shared via <strong style={{ color: "#4a8f3a" }}>MealRoute</strong> 🥗
+            Shared via <strong style={{ color: "var(--green-text)" }}>MealRoute</strong> 🥗
           </p>
           <p style={{ marginTop: "8px" }}>
-            <a href="/" style={{ color: "#4a8f3a", textDecoration: "none", fontSize: "13px", fontWeight: 700 }}>
+            <a href="/" style={{ color: "var(--green-text)", textDecoration: "none", fontSize: "13px", fontWeight: 700 }}>
               Create your own meal plan →
             </a>
           </p>
@@ -148,7 +148,7 @@ export default async function SharedPlanPage({ params }: { params: Promise<{ tok
             onClick={() => window.print()}
             style={{
               marginTop: "16px", padding: "10px 20px", borderRadius: "12px",
-              border: "1px solid #dfe6e0", background: "#f4f8f5", color: "#4a8f3a",
+              border: "1px solid #dfe6e0", background: "#f4f8f5", color: "var(--green-text)",
               fontSize: "12px", fontWeight: 700, cursor: "pointer",
             }}
           >

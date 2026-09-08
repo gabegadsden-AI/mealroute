@@ -36,7 +36,7 @@
 .manual-search button {
   border: 1px solid var(--green);
   background: var(--green);
-  color: #ffffff;
+  color: #1c2920;
   border-radius: 11px;
   padding: 10px 13px;
   font-size: 9px;
@@ -93,7 +93,7 @@
 
 .manual-result-list > button > b {
   flex: 0 0 auto;
-  color: var(--green);
+  color: var(--green-text);
   font-size: 10px;
   text-align: right;
 }
@@ -116,7 +116,7 @@
 }
 
 .manual-source strong {
-  color: var(--green);
+  color: var(--green-text);
   font-size: 9px;
 }
 
@@ -202,7 +202,7 @@
 }
 
 .manual-preview .manual-calories strong {
-  color: var(--green);
+  color: var(--green-text);
   font-size: 23px;
   margin: 0;
 }
@@ -221,7 +221,7 @@
 .manual-add-actions button {
   border: 1px solid var(--green);
   background: var(--green);
-  color: #ffffff;
+  color: #1c2920;
   border-radius: 12px;
   padding: 12px 9px;
   font-size: 9px;
@@ -230,7 +230,7 @@
 
 .manual-add-actions button:last-child {
   background: #f4f8f5;
-  color: var(--green);
+  color: var(--green-text);
 }
 
 .manual-add-actions button:disabled {
@@ -278,8 +278,6 @@
   font-size: 9px;
   line-height: 1.5;
 }
-
-@media (max-width: 430px) {
   .manual-search,
   .manual-add-actions,
   .manual-custom-form {
@@ -294,7 +292,6 @@
   .manual-preview {
     grid-template-columns: repeat(2, 1fr);
   }
-}
 /* ─── Barcode Scanner ─────────────────────────────────── */
 
 .barcode-camera-frame {
@@ -332,11 +329,8 @@
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
   animation: barcode-pulse 2s ease-in-out infinite;
 }
-
-@keyframes barcode-pulse {
-  0%, 100% { border-color: var(--green); }
+  0%, 100% { border-color: var(--green-text); }
   50% { border-color: rgba(204, 255, 0, 0.4); }
-}
 
 .barcode-scanning-hint {
   position: absolute;
@@ -344,7 +338,7 @@
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.75);
-  color: var(--green);
+  color: var(--green-text);
   font-size: 10px;
   padding: 6px 14px;
   border-radius: 20px;
@@ -387,9 +381,9 @@
 }
 
 .barcode-energy-row .segment button.active {
-  border-color: var(--green);
+  border-color: var(--green-text);
   background: var(--green);
-  color: #ffffff;
+  color: #1c2920;
 }
 
 .barcode-macro-grid {
@@ -430,7 +424,7 @@
 .barcode-macro-grid input:focus,
 .barcode-energy-row input:focus,
 .barcode-label-fields input:focus {
-  border-color: var(--green);
+  border-color: var(--green-text);
 }
 
 .barcode-label-fields .manual-custom-name input {
@@ -460,7 +454,7 @@
   text-decoration: underline;
 }
 
-.manual-toggle:hover { color: var(--green); }
+.manual-toggle:hover { color: var(--green-text); }
 
 .scan-again {
   display: block;
@@ -476,10 +470,10 @@
   cursor: pointer;
 }
 
-.scan-again:hover { border-color: var(--green); color: var(--green); }
+.scan-again:hover { border-color: var(--green-text); color: var(--green-text); }
 
 .saved-note {
-  color: var(--green);
+  color: var(--green-text);
   font-size: 9px;
   margin-top: 8px;
   text-align: center;
@@ -518,7 +512,7 @@
 }
 
 .manual-fields input:focus, .manual-fields select:focus {
-  border-color: var(--green);
+  border-color: var(--green-text);
 }
 
 .macro-row {
@@ -550,7 +544,7 @@
 .manual-actions .btn-primary {
   border: 1px solid var(--green);
   background: var(--green);
-  color: #ffffff;
+  color: #1c2920;
   border-radius: 12px;
   padding: 12px 9px;
   font-size: 9px;
@@ -567,7 +561,7 @@
 .manual-actions .btn-secondary {
   border: 1px solid #dfe6e0;
   background: #f4f8f5;
-  color: var(--green);
+  color: var(--green-text);
   border-radius: 12px;
   padding: 12px 9px;
   font-size: 9px;
@@ -591,11 +585,8 @@
   font-size: 9px;
   line-height: 1.5;
 }
-
-@media (max-width: 430px) {
   .macro-row { grid-template-columns: 1fr; }
   .manual-actions { grid-template-columns: 1fr; }
-}
 
 /* ─── Verified Products section ──────────────────────── */
 
@@ -681,36 +672,30 @@
 /* Plan picker animation + active button */
 .plan-picker-open {
   animation: planPickerSlide 0.25s ease-out;
-  border-color: var(--green, #4a8f3a);
+  border-color: var(--green-text, #3e8033);
 }
-
-@keyframes planPickerSlide {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
-}
 
 .btn-secondary.active {
   background: rgba(76, 175, 80, 0.12);
-  border-color: var(--green, #4a8f3a);
-  color: var(--green, #4a8f3a);
+  border-color: var(--green-text, #3e8033);
+  color: var(--green-text, #3e8033);
 }
 
 .btn-secondary.active,
 .btn-secondary.active:disabled {
   background: rgba(76, 175, 80, 0.12) !important;
-  border-color: var(--green, #4a8f3a) !important;
-  color: var(--green, #4a8f3a) !important;
+  border-color: var(--green-text, #3e8033) !important;
+  color: var(--green-text, #3e8033) !important;
   opacity: 1 !important;
 }
 
 /* Highlight for newly scheduled meal */
 .weekly-plan-meal.just-added {
   animation: mealFlash 1.2s ease-out 3;
-  border-color: var(--green, #4a8f3a) !important;
+  border-color: var(--green-text, #3e8033) !important;
 }
-
-@keyframes mealFlash {
   0% { box-shadow: 0 0 0 0 rgba(74, 143, 58, 0); }
-  30% { box-shadow: 0 0 0 3px rgba(74, 143, 58, 0.4); border-color: var(--green, #4a8f3a); }
+  30% { box-shadow: 0 0 0 3px rgba(93, 176, 77, 0.4); border-color: var(--green-text, #3e8033); }
   100% { box-shadow: 0 0 0 0 rgba(74, 143, 58, 0); }
-}
