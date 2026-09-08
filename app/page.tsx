@@ -551,6 +551,7 @@ export default function Home() {
       protein: recipe.proteinPerServing,
       carbs: recipe.carbsPerServing,
       fat: recipe.fatPerServing,
+      fibre: recipe.fibrePerServing,
       time: "",
       eaten: false,
       locked: false,
@@ -1124,6 +1125,7 @@ export default function Home() {
       protein: nutrition.protein,
       carbs: nutrition.carbs,
       fat: nutrition.fat,
+      fibre: nutrition.fibre,
       time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       eaten: destination === "today",
       color: "wrap",
@@ -1180,7 +1182,7 @@ export default function Home() {
     if (!analysis) return;
     const nextMeal = {
       id: Date.now(), type: destination === "today" ? "Logged meal" : "Planned meal", name: analysis.mealName,
-      calories: analysis.calories.best, protein: analysis.protein, carbs: analysis.carbs, fat: analysis.fat,
+      calories: analysis.calories.best, protein: analysis.protein, carbs: analysis.carbs, fat: analysis.fat, fibre: analysis.fibre,
       time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       eaten: destination === "today", color: "salmon",
       ingredients: analysis.ingredients

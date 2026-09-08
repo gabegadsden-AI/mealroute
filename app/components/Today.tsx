@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { localDateKey, dateFromKey, type Meal } from "../../lib/app-utils";
+import { localDateKey, dateFromKey, foodEmoji, type Meal } from "../../lib/app-utils";
 import { type MealSlot, mealSlots, mealSlotLabels } from "../../lib/weekly-plan";
 import { type Micronutrients, MICRONUTRIENT_LABELS, MICRONUTRIENT_UNITS, MICRONUTRIENT_DV, MICRONUTRIENT_KEYS, hasMicronutrientData } from "../../lib/micronutrients";
 
@@ -150,9 +150,24 @@ export function MacroGoal({ kind, label, value, goal }: { kind: string; label: s
 }
 
 export function MealCard({ meal, onMeal }: { meal: Meal; onMeal: (id: number) => void }) {
-  return <article className={`meal-card ${meal.eaten ? "done" : ""}`}>
-    <div className={`meal-image ${meal.color}`}><span>{meal.type === "Breakfast" ? "◒" : meal.type === "Lunch" ? "◐" : meal.type === "Dinner" ? "◑" : "●"}</span></div>
-    <div className="meal-info"><div><span>{meal.type} · {meal.time}</span>{meal.locked && <em>Locked</em>}</div><h3>{meal.name}</h3><p>{meal.calories} kcal <b>·</b> {meal.protein}g protein</p></div>
+  const [open, setOpen] = useState(false);
+  const fibre = typeof meal.fibre === "number" ? `${Math.round(meal.fibre)}g` : "—";
+  return <article className={`meal-card ${meal.eaten ? "done" : ""} ${open ? "expanded" : ""}`}>
+    <div className="meal-card-main" role="button" tabIndex={0} aria-expanded={open} aria-label={`View nutrition details for ${meal.name}`} onClick={() => setOpen(current => !current)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen(current => !current); } }}>
+      <div className={`meal-image ${meal.color}`}><span>{foodEmoji(meal.name, meal.type)}</span></div>
+      <div className="meal-info"><div><span>{meal.type} · {meal.time}</span>{meal.locked && <em>Locked</em>}</div><h3>{meal.name}</h3><p>{meal.calories} kcal <b>·</b> {meal.protein}g protein <b className={`meal-chevron ${open ? "up" : ""}`}>▾</b></p></div>
+    </div>
+    {open && <div className="meal-detail">
+      <div className="meal-macro-grid">
+        <div><span>Calories</span><strong>{meal.calories.toLocaleString()} <small>kcal</small></strong></div>
+        <div><span>Protein</span><strong>{meal.protein}g</strong></div>
+        <div><span>Carbs</span><strong>{meal.carbs}g</strong></div>
+        <div><span>Fat</span><strong>{meal.fat}g</strong></div>
+        <div><span>Fibre</span><strong>{fibre}</strong></div>
+      </div>
+      {meal.ingredients && meal.ingredients.length > 0 && <div className="meal-detail-ingredients"><p>Ingredients</p>{meal.ingredients.map((ingredient, index) => <span key={index}>{ingredient.name}{ingredient.amountGrams ? ` · ${Math.round(ingredient.amountGrams)}g` : ""}</span>)}</div>}
+      {typeof meal.fibre !== "number" && <small className="meal-detail-note">Fibre wasn’t recorded for this meal — log a new meal to capture it.</small>}
+    </div>}
     <button className={meal.eaten ? "check checked" : "check"} onClick={() => onMeal(meal.id)} aria-label={`Mark ${meal.name} ${meal.eaten ? "not eaten" : "eaten"}`}>{meal.eaten ? "✓" : ""}</button>
   </article>;
 }
@@ -197,7 +212,7 @@ export function PlannedMealCard({ meal, defaultDate, onSchedule, onRemove, onLog
   }
 
   return <article className={`weekly-plan-meal${highlight ? " just-added" : ""}`}>
-    <div className="weekly-plan-meal-head"><div className={`meal-image ${meal.color}`}><span>{meal.mealSlot ? mealSlotLabels[meal.mealSlot].slice(0, 1) : "●"}</span></div><div><span>{meal.mealSlot ? mealSlotLabels[meal.mealSlot] : "Unscheduled"}</span><h3>{meal.name}</h3><p>{meal.calories} kcal · {meal.protein}g protein</p></div></div>
+    <div className="weekly-plan-meal-head"><div className={`meal-image ${meal.color}`}><span>{foodEmoji(meal.name, meal.mealSlot)}</span></div><div><span>{meal.mealSlot ? mealSlotLabels[meal.mealSlot] : "Unscheduled"}</span><h3>{meal.name}</h3><p>{meal.calories} kcal · {meal.protein}g protein</p></div></div>
     {editing && <div className="plan-schedule-editor">
       <label><span>Date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
       <label><span>Meal</span><select value={slot} onChange={event => setSlot(event.target.value as MealSlot)}>{mealSlots.map(value => <option key={value} value={value}>{mealSlotLabels[value]}</option>)}</select></label>

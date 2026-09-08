@@ -11,7 +11,50 @@ import {
 
 export type Tab = "today" | "plan" | "log" | "grocery" | "recipes" | "progress";
 export type PlanSubView = "week" | "palette" | "review";
-export type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; time: string; eaten: boolean; locked?: boolean; color: string; ingredients?: PlannedIngredient[]; plannedDate?: string; mealSlot?: MealSlot; micros?: Micronutrients };
+export type Meal = { id: number; type: string; name: string; calories: number; protein: number; carbs: number; fat: number; fibre?: number; time: string; eaten: boolean; locked?: boolean; color: string; ingredients?: PlannedIngredient[]; plannedDate?: string; mealSlot?: MealSlot; micros?: Micronutrients };
+const FOOD_EMOJI_MAP: [RegExp, string][] = [
+  [/chicken|poultry|turkey/i, "\ud83c\udf57"],
+  [/beef|steak|lamb|venison/i, "\ud83e\udd69"],
+  [/pork|bacon|ham/i, "\ud83e\udd53"],
+  [/fish|salmon|tuna|cod|hoki|teriyaki/i, "\ud83d\udc1f"],
+  [/shrimp|prawn|seafood/i, "\ud83c\udf64"],
+  [/egg|omelet/i, "\ud83c\udf73"],
+  [/rice|sushi|risotto/i, "\ud83c\udf5a"],
+  [/pasta|spaghetti|penne|macaroni|lasagna|noodle|ramen/i, "\ud83c\udf5d"],
+  [/burger/i, "\ud83c\udf54"],
+  [/pizza/i, "\ud83c\udf55"],
+  [/burrito|wrap/i, "\ud83c\udf2f"],
+  [/taco/i, "\ud83c\udf2e"],
+  [/salad|greens|spinach|kale/i, "\ud83e\udd57"],
+  [/soup|broth|curry|stew|chowder/i, "\ud83c\udf72"],
+  [/yog\w+|porridge|oat|cereal|granola|muesli/i, "\ud83e\udd63"],
+  [/berry|berries|strawberr|blueberr|raspberr/i, "\ud83c\udf52"],
+  [/banana/i, "\ud83c\udf4c"],
+  [/apple/i, "\ud83c\udf4e"],
+  [/avocado/i, "\ud83e\udd51"],
+  [/smoothie|shake|juice/i, "\ud83e\udd64"],
+  [/coffee|latte|cappuccino/i, "\u2615"],
+  [/tea|matcha/i, "\ud83c\udf75"],
+  [/milk|cream/i, "\ud83e\udd5b"],
+  [/cheese/i, "\ud83e\uddc0"],
+  [/bread|toast|bagel|bun|roll/i, "\ud83c\udf5e"],
+  [/sandwich|panini/i, "\ud83c\udf96"],
+  [/pancake|waffle/i, "\ud83e\udee5"],
+  [/potato|kumara|fries|chips/i, "\ud83c\udf5f"],
+  [/protein bar|snack bar/i, "\ud83c\udf6b"],
+  [/nut|almond|peanut|cashew/i, "\ud83e\uddc8"],
+];
+
+export function foodEmoji(name: string, type?: string): string {
+  for (const [pattern, emoji] of FOOD_EMOJI_MAP) {
+    if (pattern.test(name)) return emoji;
+  }
+  if (/breakfast/i.test(type || "")) return "\ud83c\udf73";
+  if (/lunch/i.test(type || "")) return "\ud83c\udf96";
+  if (/dinner/i.test(type || "")) return "\ud83c\udf7d\ufe0f";
+  return "\ud83c\udf7d\ufe0f";
+}
+
 export type LabelNutrition = { productName: string; energyValue: number; energyUnit: "kcal" | "kJ"; carbs: number; protein: number; fat: number; fibre: number };
 export type SavedPackagedProduct = LabelNutrition & { id: string; updatedAt: number };
 export type LabelNutritionDraft = Omit<LabelNutrition, "energyValue" | "carbs" | "protein" | "fat" | "fibre"> & { energyValue: number | ""; carbs: number | ""; protein: number | ""; fat: number | ""; fibre: number | "" };
