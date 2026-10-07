@@ -115,9 +115,44 @@ export function Modal({ type, close, addWater, setWaterTotal, saveWaterGoal, wat
     return "";
   }
 
+  function round1(value: number) {
+    return Math.round((value + Number.EPSILON) * 10) / 10;
+  }
+
   function updateReviewGrams(index: number, value: string) {
     const amountGrams = value === "" ? "" : Math.min(5000, Math.max(1, Math.round(Number(value) || 1)));
-    setReviewItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, amountGrams } : item));
+    setReviewItems(items => items.map((item, itemIndex) => {
+      if (itemIndex !== index) return item;
+      if (amountGrams === "") return { ...item, amountGrams };
+      // Rescale this ingredient's nutrition right away so the summary never shows new grams next to
+      // stale calories while the user waits to tap "Update nutrition" (what the tester hit on Rice).
+      const label = item.labelNutrition;
+      if (label && labelIsComplete(item)) {
+        const ratio = Number(amountGrams) / 100;
+        const caloriesPer100g = label.energyUnit === "kJ" ? Number(label.energyValue) / 4.184 : Number(label.energyValue);
+        return {
+          ...item,
+          amountGrams,
+          calories: Math.round(caloriesPer100g * ratio),
+          protein: round1(Number(label.protein) * ratio),
+          carbs: round1(Number(label.carbs) * ratio),
+          fat: round1(Number(label.fat) * ratio),
+          fibre: round1(Number(label.fibre) * ratio),
+        };
+      }
+      const previousGrams = Number(item.amountGrams);
+      if (!Number.isFinite(previousGrams) || previousGrams <= 0) return { ...item, amountGrams };
+      const ratio = Number(amountGrams) / previousGrams;
+      return {
+        ...item,
+        amountGrams,
+        calories: Math.round(item.calories * ratio),
+        protein: round1(item.protein * ratio),
+        carbs: round1(item.carbs * ratio),
+        fat: round1(item.fat * ratio),
+        fibre: round1(item.fibre * ratio),
+      };
+    }));
     setReviewDirty(true);
     setConfirmedUpdate(false);
   }
