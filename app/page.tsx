@@ -111,6 +111,7 @@ import {
   mergeMealHistory,
   mergeSavedProducts,
   dateFromKey,
+  foodEmoji,
   mealTotals,
   numericValue,
   nutritionValue,
@@ -167,7 +168,7 @@ export default function Home() {
   const [legacyImport, setLegacyImport] = useState<LegacyImportData | null>(null);
   const [importingLegacy, setImportingLegacy] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
-  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros" | "weight" | "dietary" | "notifications" | "manual" | "barcode">(null);
+  const [modal, setModal] = useState<null | "water" | "log" | "scan" | "clarify" | "result" | "profile" | "goals" | "macros" | "weight" | "dietary" | "notifications" | "manual" | "barcode" | "previous">(null);
   const [manualStartMode, setManualStartMode] = useState<"search" | "saved" | "custom">("search");
   const [manualInitialFood, setManualInitialFood] = useState<ManualFoodItem | null>(null);
   const [toast, setToast] = useState("");
@@ -198,6 +199,30 @@ export default function Home() {
   const water = selectedDate ? waterHistory[selectedDate]?.amount_ml || 0 : 0;
   const waterGoal = Number(profile?.water_goal_ml || DEFAULT_WATER_GOAL_ML);
   const target = Number(profile?.calorie_goal || profile?.suggested_calorie_goal || 1850);
+  const previousMeals = useMemo(() => {
+    const today = localDateKey();
+    const byName = new Map<string, { meal: Meal; date: string; count: number }>();
+    Object.keys(mealHistory)
+      .sort()
+      .reverse()
+      .forEach(date => {
+        (mealHistory[date] || []).forEach(meal => {
+          const key = meal.name.trim().toLowerCase();
+          const existing = byName.get(key);
+          if (existing) {
+            existing.count += 1;
+            return;
+          }
+          byName.set(key, { meal, date, count: 1 });
+        });
+      });
+    return Array.from(byName.values()).slice(0, 30).map(entry => ({
+      ...entry.meal,
+      emoji: foodEmoji(entry.meal.name, entry.meal.type),
+      lastLoggedLabel: entry.date === today ? "today" : dateFromKey(entry.date).toLocaleDateString([], { day: "numeric", month: "short" }),
+      timesLogged: entry.count,
+    }));
+  }, [mealHistory]);
   const suggestedMacros = useMemo(
     () => suggestedMacroTargets(target, profile?.primary_goal || null),
     [target, profile?.primary_goal],
@@ -951,6 +976,25 @@ export default function Home() {
     setTab("today");
   }
 
+  async function logPreviousMeal(source: Meal) {
+    trackEvent("previous_meal_log", { meal_name: source.name });
+    const today = localDateKey();
+    const { plannedDate: _plannedDate, mealSlot: _mealSlot, locked: _locked, ...mealDetails } = source;
+    const loggedMeal: Meal = {
+      ...mealDetails,
+      id: Date.now(),
+      type: "Logged meal",
+      time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+      eaten: true,
+    };
+    const nextHistory = { ...mealHistory, [today]: [...(mealHistory[today] || []), loggedMeal] };
+    setMealHistory(nextHistory);
+    setSelectedDate(today);
+    setModal(null);
+    setTab("today");
+    await saveMealState(nextHistory, plannedMeals, `${source.name} logged again and saved to your account`);
+  }
+
   async function openWeeklyGrocery(startKey: string) {
     setPlanWeekStart(startKey);
     await refreshGroceryForPlan(plannedMeals, startKey);
@@ -1391,7 +1435,7 @@ export default function Home() {
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} onManualSearch={(mode: "search" | "saved" | "custom") => openManualFood(mode)} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} onSaveProfileDietary={saveProfileDietary} onSaveProfileNotifications={saveProfileNotifications} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} onManualSearch={(mode: "search" | "saved" | "custom") => openManualFood(mode)} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} onSaveProfileDietary={saveProfileDietary} onSaveProfileNotifications={saveProfileNotifications} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} previousMeals={previousMeals} onLogPrevious={logPreviousMeal} />}
       <LegalFooter />
     </main>
   );
