@@ -21,6 +21,11 @@ export type CloudMeal = {
 export type CloudMealIngredient = {
   name: string;
   amountGrams: number;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  fibre?: number;
 };
 
 export type CloudMealHistory = Record<string, CloudMeal[]>;
@@ -40,6 +45,11 @@ export type CloudSavedProduct = {
 function numberValue(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+function optionalNumberValue(value: unknown): number | undefined {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : undefined;
 }
 
 /**
@@ -85,9 +95,14 @@ function totalsFor(meals: CloudMeal[]) {
 function normalizeMealIngredients(raw: unknown): CloudMealIngredient[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map(item => ({
+    .map((item: any) => ({
       name: String(item?.name || "").replace(/\s+/g, " ").trim().slice(0, 160),
       amountGrams: numberValue(item?.amountGrams),
+      calories: optionalNumberValue(item?.calories),
+      protein: optionalNumberValue(item?.protein),
+      carbs: optionalNumberValue(item?.carbs),
+      fat: optionalNumberValue(item?.fat),
+      fibre: optionalNumberValue(item?.fibre),
     }))
     .filter(item => item.name && item.amountGrams > 0 && item.amountGrams <= 5000);
 }

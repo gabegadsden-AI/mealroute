@@ -1002,19 +1002,54 @@ export default function Home() {
     setModal("appendIngredient");
   }
 
-  async function addIngredientToMeal(food: ManualFoodItem, grams: number) {
-    if (!editingMealContext) return false;
-    const { meal, date } = editingMealContext;
-    const nutrition = calculateManualNutrition(food, grams);
-    const updatedMeal: Meal = {
+  function appendIngredientNutrition(meal: Meal, food: ManualFoodItem, nutrition: ReturnType<typeof calculateManualNutrition>): Meal {
+    return {
       ...meal,
-      ingredients: [...(meal.ingredients || []), { name: food.name, amountGrams: nutrition.grams }],
+      ingredients: [...(meal.ingredients || []), {
+        name: food.name,
+        amountGrams: nutrition.grams,
+        calories: nutrition.calories,
+        protein: nutrition.protein,
+        carbs: nutrition.carbs,
+        fat: nutrition.fat,
+        fibre: nutrition.fibre,
+      }],
       calories: Math.round(meal.calories + nutrition.calories),
       protein: Math.round((meal.protein + nutrition.protein) * 10) / 10,
       carbs: Math.round((meal.carbs + nutrition.carbs) * 10) / 10,
       fat: Math.round((meal.fat + nutrition.fat) * 10) / 10,
       fibre: Math.round(((meal.fibre || 0) + nutrition.fibre) * 10) / 10,
     };
+  }
+
+  function ingredientMacros(ingredient?: PlannedIngredient) {
+    return {
+      calories: ingredient?.calories || 0,
+      protein: ingredient?.protein || 0,
+      carbs: ingredient?.carbs || 0,
+      fat: ingredient?.fat || 0,
+      fibre: ingredient?.fibre || 0,
+    };
+  }
+
+  function applyIngredientMacroDelta(meal: Meal, oldIngredient: PlannedIngredient, newIngredient: PlannedIngredient | null): Meal {
+    const old = ingredientMacros(oldIngredient);
+    const next = ingredientMacros(newIngredient || undefined);
+    return {
+      ...meal,
+      calories: Math.max(0, Math.round(meal.calories - old.calories + next.calories)),
+      protein: Math.max(0, Math.round((meal.protein - old.protein + next.protein) * 10) / 10),
+      carbs: Math.max(0, Math.round((meal.carbs - old.carbs + next.carbs) * 10) / 10),
+      fat: Math.max(0, Math.round((meal.fat - old.fat + next.fat) * 10) / 10),
+      fibre: typeof meal.fibre === "number" ? Math.max(0, Math.round((meal.fibre - old.fibre + next.fibre) * 10) / 10) : (next.fibre || meal.fibre),
+    };
+  }
+
+  async function addIngredientToMeal(food: ManualFoodItem, grams: number) {
+    if (!editingMealContext) return false;
+    const { meal, date } = editingMealContext;
+    const nutrition = calculateManualNutrition(food, grams);
+    const updatedMeal = appendIngredientNutrition(meal, food, nutrition);
     const dayMeals = (mealHistory[date] || []).map(item => item.id === meal.id ? updatedMeal : item);
     const nextHistory = { ...mealHistory, [date]: dayMeals };
     setMealHistory(nextHistory);
@@ -1025,6 +1060,67 @@ export default function Home() {
       setEditingMealContext(null);
     }
     return saved;
+  }
+
+  async function addManualFoodToExistingMeal(mealId: number, food: ManualFoodItem, grams: number) {
+    const date = selectedDate || localDateKey();
+    const target = (mealHistory[date] || []).find(item => item.id === mealId);
+    if (!target) return false;
+    const nutrition = calculateManualNutrition(food, grams);
+    const updatedMeal = appendIngredientNutrition(target, food, nutrition);
+    const dayMeals = (mealHistory[date] || []).map(item => item.id === mealId ? updatedMeal : item);
+    const nextHistory = { ...mealHistory, [date]: dayMeals };
+    setMealHistory(nextHistory);
+    trackEvent("meal_add_ingredient", { meal_name: target.name, food_name: food.name, grams: nutrition.grams, source: "log_meal_merge" });
+    const saved = await saveMealState(nextHistory, plannedMeals, `${food.name} added to ${target.name}`);
+    if (saved) setModal(null);
+    return saved;
+  }
+
+  async function updateMealIngredient(meal: Meal, date: string, index: number, newGrams: number) {
+    const ingredient = meal.ingredients?.[index];
+    if (!ingredient || typeof ingredient.calories !== "number" || !ingredient.amountGrams || !Number.isFinite(newGrams) || newGrams <= 0) return false;
+    const ratio = newGrams / ingredient.amountGrams;
+    const updatedIngredient: PlannedIngredient = {
+      name: ingredient.name,
+      amountGrams: Math.round(newGrams * 10) / 10,
+      calories: Math.round(ingredient.calories * ratio),
+      protein: ingredient.protein !== undefined ? Math.round(ingredient.protein * ratio * 10) / 10 : undefined,
+      carbs: ingredient.carbs !== undefined ? Math.round(ingredient.carbs * ratio * 10) / 10 : undefined,
+      fat: ingredient.fat !== undefined ? Math.round(ingredient.fat * ratio * 10) / 10 : undefined,
+      fibre: ingredient.fibre !== undefined ? Math.round(ingredient.fibre * ratio * 10) / 10 : undefined,
+    };
+    let updatedMeal = applyIngredientMacroDelta(meal, ingredient, updatedIngredient);
+    updatedMeal = { ...updatedMeal, ingredients: (meal.ingredients || []).map((item, i) => i === index ? updatedIngredient : item) };
+    const dayMeals = (mealHistory[date] || []).map(m => m.id === meal.id ? updatedMeal : m);
+    const nextHistory = { ...mealHistory, [date]: dayMeals };
+    setMealHistory(nextHistory);
+    trackEvent("meal_edit_ingredient", { meal_name: meal.name, ingredient: ingredient.name });
+    return await saveMealState(nextHistory, plannedMeals, `${ingredient.name} updated in ${meal.name}`);
+  }
+
+  async function removeMealIngredient(meal: Meal, date: string, index: number) {
+    const ingredient = meal.ingredients?.[index];
+    if (!ingredient || typeof ingredient.calories !== "number") return false;
+    const remainingIngredients = (meal.ingredients || []).filter((_, i) => i !== index);
+    if (remainingIngredients.length === 0) {
+      return deleteLoggedMeal(meal, date);
+    }
+    let updatedMeal = applyIngredientMacroDelta(meal, ingredient, null);
+    updatedMeal = { ...updatedMeal, ingredients: remainingIngredients };
+    const dayMeals = (mealHistory[date] || []).map(m => m.id === meal.id ? updatedMeal : m);
+    const nextHistory = { ...mealHistory, [date]: dayMeals };
+    setMealHistory(nextHistory);
+    trackEvent("meal_edit_ingredient_remove", { meal_name: meal.name, ingredient: ingredient.name });
+    return await saveMealState(nextHistory, plannedMeals, `${ingredient.name} removed from ${meal.name}`);
+  }
+
+  async function deleteLoggedMeal(meal: Meal, date: string) {
+    const dayMeals = (mealHistory[date] || []).filter(m => m.id !== meal.id);
+    const nextHistory = { ...mealHistory, [date]: dayMeals };
+    setMealHistory(nextHistory);
+    trackEvent("meal_deleted", { meal_name: meal.name });
+    return await saveMealState(nextHistory, plannedMeals, `${meal.name} removed from your log`);
   }
 
   async function openWeeklyGrocery(startKey: string) {
@@ -1205,7 +1301,7 @@ export default function Home() {
       time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       eaten: destination === "today",
       color: "wrap",
-      ingredients: [{ name: food.name, amountGrams: nutrition.grams }],
+      ingredients: [{ name: food.name, amountGrams: nutrition.grams, calories: nutrition.calories, protein: nutrition.protein, carbs: nutrition.carbs, fat: nutrition.fat, fibre: nutrition.fibre }],
       plannedDate: destination === "plan" ? plannedDate : undefined,
       mealSlot: destination === "plan" ? mealSlot : undefined,
     };
@@ -1263,7 +1359,15 @@ export default function Home() {
       eaten: destination === "today", color: "salmon",
       ingredients: analysis.ingredients
         .filter(ingredient => ingredient.name.trim() && ingredient.amountGrams > 0)
-        .map(ingredient => ({ name: ingredient.name.trim(), amountGrams: ingredient.amountGrams })),
+        .map(ingredient => ({
+          name: ingredient.name.trim(),
+          amountGrams: ingredient.amountGrams,
+          calories: ingredient.calories,
+          protein: ingredient.protein,
+          carbs: ingredient.carbs,
+          fat: ingredient.fat,
+          fibre: ingredient.fibre,
+        })),
     };
     let savePromise: Promise<boolean>;
     let nextPlannedMeals: Meal[] | null = null;
@@ -1324,7 +1428,7 @@ export default function Home() {
                 onOpenGoals={() => setModal("goals")}
               />
 
-              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} onBarcode={() => setModal("barcode")} micros={micros} notificationPrefs={profile?.notification_prefs} onAddIngredient={openAddIngredient} />}
+              {tab === "today" && <Today meals={meals} selectedDate={selectedDate} onSelectDate={setSelectedDate} consumed={consumed} protein={protein} carbs={carbs} fat={fat} target={target} macroTargets={macroTargets} pct={pct} water={water} waterGoal={waterGoal} onMeal={markMeal} onWater={() => setModal("water")} onLog={() => setModal("log")} onBarcode={() => setModal("barcode")} micros={micros} notificationPrefs={profile?.notification_prefs} onAddIngredient={openAddIngredient} onEditIngredient={(meal: Meal, index: number, grams: number) => updateMealIngredient(meal, selectedDate || localDateKey(), index, grams)} onRemoveIngredient={(meal: Meal, index: number) => removeMealIngredient(meal, selectedDate || localDateKey(), index)} onDeleteMeal={(meal: Meal) => deleteLoggedMeal(meal, selectedDate || localDateKey())} />}
               {tab === "plan" && (
                 <>
                   <div className="plan-sub-nav" style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
@@ -1467,7 +1571,7 @@ export default function Home() {
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} onManualSearch={(mode: "search" | "saved" | "custom") => openManualFood(mode)} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} onSaveProfileDietary={saveProfileDietary} onSaveProfileNotifications={saveProfileNotifications} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} previousMeals={previousMeals} onLogPrevious={logPreviousMeal} editingMealName={editingMealContext?.meal.name} onAddIngredientToMeal={addIngredientToMeal} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} onManualSearch={(mode: "search" | "saved" | "custom") => openManualFood(mode)} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} onSaveProfileDietary={saveProfileDietary} onSaveProfileNotifications={saveProfileNotifications} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} previousMeals={previousMeals} onLogPrevious={logPreviousMeal} editingMealName={editingMealContext?.meal.name} onAddIngredientToMeal={addIngredientToMeal} todaysMeals={meals} onAddToExistingMeal={addManualFoodToExistingMeal} />}
       <LegalFooter />
     </main>
   );

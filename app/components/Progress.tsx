@@ -243,6 +243,8 @@ export function ManualFoodEditor({
   onAdd,
   onAddToMeal,
   appendMealName,
+  existingMeals,
+  onAddToExistingMeal,
 }: {
   startMode: "search" | "saved" | "custom";
   initialFood: ManualFoodItem | null;
@@ -251,6 +253,8 @@ export function ManualFoodEditor({
   onAdd?: (food: ManualFoodItem, grams: number, destination: "today" | "plan") => Promise<boolean>;
   onAddToMeal?: (food: ManualFoodItem, grams: number) => Promise<boolean>;
   appendMealName?: string;
+  existingMeals?: { id: number; name: string }[];
+  onAddToExistingMeal?: (mealId: number, food: ManualFoodItem, grams: number) => Promise<boolean>;
 }) {
   const [mode, setMode] = useState<"search" | "saved" | "custom">(startMode);
   const [selectedFood, setSelectedFood] = useState<ManualFoodItem | null>(initialFood);
@@ -388,6 +392,17 @@ export function ManualFoodEditor({
     }
   }
 
+  async function addToExistingMeal(mealId: number) {
+    if (!selectedFood || !preview || adding || !onAddToExistingMeal) return;
+    setAdding(true);
+    setError("");
+    const saved = await onAddToExistingMeal(mealId, selectedFood, preview.grams);
+    if (!saved) {
+      setError("MealRoute could not add this ingredient. Check the message above and try again.");
+      setAdding(false);
+    }
+  }
+
   if (selectedFood) {
     return <div className="manual-food-editor">
       <button className="goals-back" type="button" onClick={() => { setSelectedFood(null); setError(""); }}>‹ Change food</button>
@@ -407,6 +422,14 @@ export function ManualFoodEditor({
         : <div className="auth-error">Enter a gram amount between 1 and 5,000.</div>}
       {error && <div className="auth-error">{error}</div>}
       <div className="manual-add-actions">{onAddToMeal ? <button type="button" disabled={!preview || adding} onClick={() => void addToMeal()}>{adding ? "Adding…" : `Add to ${appendMealName || "meal"}`}</button> : <><button type="button" disabled={!preview || adding} onClick={() => addFood("today")}>{adding ? "Saving…" : "Add to Today"}</button><button type="button" disabled={!preview || adding} onClick={() => addFood("plan")}>Add to My Plan</button></>}</div>
+      {!onAddToMeal && existingMeals && existingMeals.length > 0 && onAddToExistingMeal && <div className="manual-merge-section">
+        <p className="manual-merge-label">Already logged a meal today? Add it there instead of a new entry.</p>
+        <div className="manual-merge-list">
+          {existingMeals.map(existingMeal => <button type="button" key={existingMeal.id} disabled={adding} onClick={() => void addToExistingMeal(existingMeal.id)}>
+            <span>{existingMeal.name}</span><b>Add here</b>
+          </button>)}
+        </div>
+      </div>}
       <p className="goals-safety">Values are calculated from the selected per-100g source and the exact gram amount entered. Verify the selected food and preparation.</p>
     </div>;
   }

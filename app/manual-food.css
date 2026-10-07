@@ -239,6 +239,51 @@
   color: #9aa49d;
 }
 
+.manual-add-actions:has(> button:only-child) {
+  grid-template-columns: 1fr;
+}
+
+.manual-merge-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #dfe6e0;
+}
+
+.manual-merge-label {
+  font-size: 9px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.manual-merge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.manual-merge-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #dfe6e0;
+  background: #f4f8f5;
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 10px;
+  text-align: left;
+}
+
+.manual-merge-list button b {
+  color: var(--green-text);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.manual-merge-list button:disabled {
+  opacity: .6;
+}
+
 .manual-custom-form {
   display: grid;
   grid-template-columns: 1fr 1fr;

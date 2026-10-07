@@ -6,7 +6,7 @@ import { type Micronutrients, MICRONUTRIENT_LABELS, MICRONUTRIENT_UNITS, MICRONU
 
 const TOP_MICROS: (keyof Micronutrients)[] = ["calcium", "iron", "vitaminC", "vitaminD", "potassium", "sodium"];
 
-export function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onBarcode, micros, notificationPrefs, onAddIngredient }: any) {
+export function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onBarcode, micros, notificationPrefs, onAddIngredient, onEditIngredient, onRemoveIngredient, onDeleteMeal }: any) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const dates = today ? Array.from({ length: 7 }, (_, index) => {
@@ -89,7 +89,7 @@ export function Today({ meals, selectedDate, onSelectDate, consumed, protein, ca
     <section className="section-block">
       <div className="section-heading history-heading"><div><p className="eyebrow">MEAL HISTORY</p><h2>{selectedLabel}</h2></div><input className="history-date-picker" aria-label="Choose meal history date" type="date" value={selectedDate} max={today ? localDateKey(today) : undefined} onChange={event => { if (event.target.value) onSelectDate(event.target.value); }} /></div>
       {meals.length > 0
-        ? <><span className="history-count">{meals.filter((m: Meal) => m.eaten).length} of {meals.length} complete</span><div className="meal-list">{meals.map((meal: Meal) => <MealCard key={meal.id} meal={meal} onMeal={onMeal} onAddIngredient={onAddIngredient} />)}</div></>
+        ? <><span className="history-count">{meals.filter((m: Meal) => m.eaten).length} of {meals.length} complete</span><div className="meal-list">{meals.map((meal: Meal) => <MealCard key={meal.id} meal={meal} onMeal={onMeal} onAddIngredient={onAddIngredient} onEditIngredient={onEditIngredient} onRemoveIngredient={onRemoveIngredient} onDeleteMeal={onDeleteMeal} />)}</div></>
         : <div className="history-empty"><strong>No meals logged for this date.</strong><span>Select another day or log a meal for today.</span><button onClick={onLog}>Log today's meal</button></div>}
     </section>
 
@@ -149,9 +149,31 @@ export function MacroGoal({ kind, label, value, goal }: { kind: string; label: s
   return <div className={`macro-goal ${kind}`}><span>{label}</span><i><b style={{ width: `${goal > 0 ? Math.min(100, Math.round(value / goal * 100)) : 0}%` }} /></i><strong>{value}<small> / {goal}g</small></strong></div>;
 }
 
-export function MealCard({ meal, onMeal, onAddIngredient }: { meal: Meal; onMeal: (id: number) => void; onAddIngredient?: (meal: Meal) => void }) {
+export function MealCard({ meal, onMeal, onAddIngredient, onEditIngredient, onRemoveIngredient, onDeleteMeal }: {
+  meal: Meal;
+  onMeal: (id: number) => void;
+  onAddIngredient?: (meal: Meal) => void;
+  onEditIngredient?: (meal: Meal, index: number, grams: number) => void;
+  onRemoveIngredient?: (meal: Meal, index: number) => void;
+  onDeleteMeal?: (meal: Meal) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [gramsInput, setGramsInput] = useState("");
   const fibre = typeof meal.fibre === "number" ? `${Math.round(meal.fibre)}g` : "—";
+  const hasLegacyIngredient = (meal.ingredients || []).some(ingredient => typeof ingredient.calories !== "number");
+
+  function startEditIngredient(index: number, amountGrams: number) {
+    setEditingIndex(index);
+    setGramsInput(String(Math.round(amountGrams * 10) / 10));
+  }
+
+  function saveIngredientEdit(index: number) {
+    const grams = Number(gramsInput);
+    if (Number.isFinite(grams) && grams > 0 && onEditIngredient) onEditIngredient(meal, index, grams);
+    setEditingIndex(null);
+  }
+
   return <article className={`meal-card ${meal.eaten ? "done" : ""} ${open ? "expanded" : ""}`}>
     <div className="meal-card-main" role="button" tabIndex={0} aria-expanded={open} aria-label={`View nutrition details for ${meal.name}`} onClick={() => setOpen(current => !current)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen(current => !current); } }}>
       <div className={`meal-image ${meal.color}`}><span>{foodEmoji(meal.name, meal.type)}</span></div>
@@ -165,9 +187,34 @@ export function MealCard({ meal, onMeal, onAddIngredient }: { meal: Meal; onMeal
         <div><span>Fat</span><strong>{meal.fat}g</strong></div>
         <div><span>Fibre</span><strong>{fibre}</strong></div>
       </div>
-      {meal.ingredients && meal.ingredients.length > 0 && <div className="meal-detail-ingredients"><p>Ingredients</p>{meal.ingredients.map((ingredient, index) => <span key={index}>{ingredient.name}{ingredient.amountGrams ? ` · ${Math.round(ingredient.amountGrams)}g` : ""}</span>)}</div>}
+      {meal.ingredients && meal.ingredients.length > 0 && <div className="meal-detail-ingredients">
+        <p>Ingredients</p>
+        {meal.ingredients.map((ingredient, index) => {
+          const editable = typeof ingredient.calories === "number" && Boolean(onEditIngredient);
+          if (editingIndex === index) {
+            return <div key={index} className="ingredient-edit-row" onClick={event => event.stopPropagation()}>
+              <strong>{ingredient.name}</strong>
+              <input type="number" inputMode="decimal" min="1" max="5000" step="1" value={gramsInput} onChange={event => setGramsInput(event.target.value)} autoFocus />
+              <small>g</small>
+              <button type="button" onClick={() => saveIngredientEdit(index)}>Save</button>
+              <button type="button" className="remove" onClick={() => { setEditingIndex(null); onRemoveIngredient?.(meal, index); }}>Remove</button>
+              <button type="button" className="cancel" onClick={() => setEditingIndex(null)}>Cancel</button>
+            </div>;
+          }
+          return <button
+            type="button"
+            key={index}
+            className={`ingredient-pill${editable ? "" : " readonly"}`}
+            onClick={event => { event.stopPropagation(); if (editable) startEditIngredient(index, ingredient.amountGrams); }}
+          >
+            {ingredient.name}{ingredient.amountGrams ? ` · ${Math.round(ingredient.amountGrams)}g` : ""}
+          </button>;
+        })}
+      </div>}
+      {hasLegacyIngredient && <small className="meal-detail-note">Some ingredients here were logged before editing was added, so they can’t be adjusted or removed individually — delete the whole meal below and re-log it if needed.</small>}
       {typeof meal.fibre !== "number" && <small className="meal-detail-note">Fibre wasn’t recorded for this meal — log a new meal to capture it.</small>}
       {onAddIngredient && <button type="button" className="add-missed-ingredient" onClick={event => { event.stopPropagation(); onAddIngredient(meal); }}>＋ Add an ingredient you missed</button>}
+      {onDeleteMeal && <button type="button" className="delete-meal" onClick={event => { event.stopPropagation(); if (window.confirm(`Remove ${meal.name} from your log?`)) onDeleteMeal(meal); }}>Delete this meal</button>}
     </div>}
     <button className={meal.eaten ? "check checked" : "check"} onClick={() => onMeal(meal.id)} aria-label={`Mark ${meal.name} ${meal.eaten ? "not eaten" : "eaten"}`}>{meal.eaten ? "✓" : ""}</button>
   </article>;

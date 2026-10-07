@@ -142,12 +142,22 @@ export function nutritionValue(value: unknown) {
   return Number.isFinite(number) ? Math.max(0, Math.round((number + Number.EPSILON) * 10) / 10) : 0;
 }
 
+function optionalNutritionValue(value: unknown): number | undefined {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round((number + Number.EPSILON) * 10) / 10 : undefined;
+}
+
 export function normalizeStoredIngredients(raw: unknown): PlannedIngredient[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((item: any) => ({
       name: String(item?.name || "").replace(/\s+/g, " ").trim().slice(0, 160),
       amountGrams: nutritionValue(item?.amountGrams),
+      calories: optionalNutritionValue(item?.calories),
+      protein: optionalNutritionValue(item?.protein),
+      carbs: optionalNutritionValue(item?.carbs),
+      fat: optionalNutritionValue(item?.fat),
+      fibre: optionalNutritionValue(item?.fibre),
     }))
     .filter(item => item.name && item.amountGrams > 0 && item.amountGrams <= 5000);
 }

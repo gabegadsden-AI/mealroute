@@ -7,6 +7,11 @@ export type GroceryCategory = "Produce" | "Meat & seafood" | "Dairy & eggs" | "P
 export type PlannedIngredient = {
   name: string;
   amountGrams: number;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  fibre?: number;
 };
 
 export type GroceryPlanMeal = {
