@@ -173,7 +173,7 @@ export function Modal({ type, close, addWater, setWaterTotal, saveWaterGoal, wat
         <div className="result-ingredient-list">
           {reviewItems.map((ingredient, index) => <div className="result-ingredient" key={index}>
             <div className="ingredient-summary">
-              <button className="ingredient-main" disabled={!fixingResult} onClick={() => setEditingIndex(editingIndex === index ? null : index)}>
+              <button className="ingredient-main" onClick={() => { if (!fixingResult) setFixingResult(true); setEditingIndex(current => current === index ? null : index); }}>
                 <strong>{ingredient.name || "New ingredient"}</strong>
                 <span>{ingredient.amountGrams ? `${ingredient.amountGrams} g` : "Add grams"} · {ingredient.calories} kcal</span>
                 <small><i>C {ingredient.carbs}g</i><i>P {ingredient.protein}g</i><i>F {ingredient.fat}g</i></small>
