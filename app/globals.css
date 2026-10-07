@@ -134,7 +134,7 @@ button { color:inherit; font:inherit; cursor:pointer; }
 .meal-card.expanded .meal-card-main .meal-image{outline:2px solid var(--green-dark)}
 .meal-chevron{margin:0 2px 0 5px;color:var(--green-text);font-size:9px;transition:transform .18s ease;display:inline-block}
 .meal-chevron.up{transform:rotate(180deg)}
-.meal-detail{flex-basis:100%;margin-top:4px;padding-top:10px;border-top:1px dashed #dfe6e0}
+.meal-detail{flex-basis:100%;margin-top:4px;padding-top:10px;border-top:1px dashed #dfe6e0}.add-missed-ingredient{width:100%;text-align:left;border:0;border-top:1px dashed #dfe6e0;background:transparent;color:var(--green-text);font-weight:800;font-size:11px;padding:12px 0 2px;margin-top:10px}
 .meal-macro-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
 .meal-macro-grid>div{background:#ffffff;border:1px solid #e4e9e4;border-radius:12px;padding:9px 7px;text-align:center}
 .meal-macro-grid span{display:block;color:var(--muted);font-size:8px;text-transform:uppercase;letter-spacing:.06em}

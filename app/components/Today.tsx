@@ -6,7 +6,7 @@ import { type Micronutrients, MICRONUTRIENT_LABELS, MICRONUTRIENT_UNITS, MICRONU
 
 const TOP_MICROS: (keyof Micronutrients)[] = ["calcium", "iron", "vitaminC", "vitaminD", "potassium", "sodium"];
 
-export function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onBarcode, micros, notificationPrefs }: any) {
+export function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onBarcode, micros, notificationPrefs, onAddIngredient }: any) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const dates = today ? Array.from({ length: 7 }, (_, index) => {
@@ -89,7 +89,7 @@ export function Today({ meals, selectedDate, onSelectDate, consumed, protein, ca
     <section className="section-block">
       <div className="section-heading history-heading"><div><p className="eyebrow">MEAL HISTORY</p><h2>{selectedLabel}</h2></div><input className="history-date-picker" aria-label="Choose meal history date" type="date" value={selectedDate} max={today ? localDateKey(today) : undefined} onChange={event => { if (event.target.value) onSelectDate(event.target.value); }} /></div>
       {meals.length > 0
-        ? <><span className="history-count">{meals.filter((m: Meal) => m.eaten).length} of {meals.length} complete</span><div className="meal-list">{meals.map((meal: Meal) => <MealCard key={meal.id} meal={meal} onMeal={onMeal} />)}</div></>
+        ? <><span className="history-count">{meals.filter((m: Meal) => m.eaten).length} of {meals.length} complete</span><div className="meal-list">{meals.map((meal: Meal) => <MealCard key={meal.id} meal={meal} onMeal={onMeal} onAddIngredient={onAddIngredient} />)}</div></>
         : <div className="history-empty"><strong>No meals logged for this date.</strong><span>Select another day or log a meal for today.</span><button onClick={onLog}>Log today's meal</button></div>}
     </section>
 
@@ -149,7 +149,7 @@ export function MacroGoal({ kind, label, value, goal }: { kind: string; label: s
   return <div className={`macro-goal ${kind}`}><span>{label}</span><i><b style={{ width: `${goal > 0 ? Math.min(100, Math.round(value / goal * 100)) : 0}%` }} /></i><strong>{value}<small> / {goal}g</small></strong></div>;
 }
 
-export function MealCard({ meal, onMeal }: { meal: Meal; onMeal: (id: number) => void }) {
+export function MealCard({ meal, onMeal, onAddIngredient }: { meal: Meal; onMeal: (id: number) => void; onAddIngredient?: (meal: Meal) => void }) {
   const [open, setOpen] = useState(false);
   const fibre = typeof meal.fibre === "number" ? `${Math.round(meal.fibre)}g` : "—";
   return <article className={`meal-card ${meal.eaten ? "done" : ""} ${open ? "expanded" : ""}`}>
@@ -167,6 +167,7 @@ export function MealCard({ meal, onMeal }: { meal: Meal; onMeal: (id: number) =>
       </div>
       {meal.ingredients && meal.ingredients.length > 0 && <div className="meal-detail-ingredients"><p>Ingredients</p>{meal.ingredients.map((ingredient, index) => <span key={index}>{ingredient.name}{ingredient.amountGrams ? ` · ${Math.round(ingredient.amountGrams)}g` : ""}</span>)}</div>}
       {typeof meal.fibre !== "number" && <small className="meal-detail-note">Fibre wasn’t recorded for this meal — log a new meal to capture it.</small>}
+      {onAddIngredient && <button type="button" className="add-missed-ingredient" onClick={event => { event.stopPropagation(); onAddIngredient(meal); }}>＋ Add an ingredient you missed</button>}
     </div>}
     <button className={meal.eaten ? "check checked" : "check"} onClick={() => onMeal(meal.id)} aria-label={`Mark ${meal.name} ${meal.eaten ? "not eaten" : "eaten"}`}>{meal.eaten ? "✓" : ""}</button>
   </article>;

@@ -241,12 +241,16 @@ export function ManualFoodEditor({
   recentFoods,
   savedProducts,
   onAdd,
+  onAddToMeal,
+  appendMealName,
 }: {
   startMode: "search" | "saved" | "custom";
   initialFood: ManualFoodItem | null;
   recentFoods: ManualFoodItem[];
   savedProducts: SavedPackagedProduct[];
-  onAdd: (food: ManualFoodItem, grams: number, destination: "today" | "plan") => Promise<boolean>;
+  onAdd?: (food: ManualFoodItem, grams: number, destination: "today" | "plan") => Promise<boolean>;
+  onAddToMeal?: (food: ManualFoodItem, grams: number) => Promise<boolean>;
+  appendMealName?: string;
 }) {
   const [mode, setMode] = useState<"search" | "saved" | "custom">(startMode);
   const [selectedFood, setSelectedFood] = useState<ManualFoodItem | null>(initialFood);
@@ -363,12 +367,23 @@ export function ManualFoodEditor({
   }
 
   async function addFood(destination: "today" | "plan") {
-    if (!selectedFood || !preview || adding) return;
+    if (!selectedFood || !preview || adding || !onAdd) return;
     setAdding(true);
     setError("");
     const saved = await onAdd(selectedFood, preview.grams, destination);
     if (!saved) {
       setError("MealRoute could not complete this entry. Check the message above and try again.");
+      setAdding(false);
+    }
+  }
+
+  async function addToMeal() {
+    if (!selectedFood || !preview || adding || !onAddToMeal) return;
+    setAdding(true);
+    setError("");
+    const saved = await onAddToMeal(selectedFood, preview.grams);
+    if (!saved) {
+      setError("MealRoute could not add this ingredient. Check the message above and try again.");
       setAdding(false);
     }
   }
@@ -391,7 +406,7 @@ export function ManualFoodEditor({
         </div>
         : <div className="auth-error">Enter a gram amount between 1 and 5,000.</div>}
       {error && <div className="auth-error">{error}</div>}
-      <div className="manual-add-actions"><button type="button" disabled={!preview || adding} onClick={() => addFood("today")}>{adding ? "Saving…" : "Add to Today"}</button><button type="button" disabled={!preview || adding} onClick={() => addFood("plan")}>Add to My Plan</button></div>
+      <div className="manual-add-actions">{onAddToMeal ? <button type="button" disabled={!preview || adding} onClick={() => void addToMeal()}>{adding ? "Adding…" : `Add to ${appendMealName || "meal"}`}</button> : <><button type="button" disabled={!preview || adding} onClick={() => addFood("today")}>{adding ? "Saving…" : "Add to Today"}</button><button type="button" disabled={!preview || adding} onClick={() => addFood("plan")}>Add to My Plan</button></>}</div>
       <p className="goals-safety">Values are calculated from the selected per-100g source and the exact gram amount entered. Verify the selected food and preparation.</p>
     </div>;
   }
