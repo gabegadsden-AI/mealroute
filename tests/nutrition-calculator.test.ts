@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateVerifiedIngredients } from "../api/analyze-food/nutrition-calculator";
+import { calculateVerifiedIngredients } from "../app/api/analyze-food/nutrition-calculator";
 
 describe("calculateVerifiedIngredients", () => {
   it("calculates calories for 200g brown rice (cooked)", async () => {
