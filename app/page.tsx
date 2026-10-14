@@ -1225,7 +1225,9 @@ export default function Home() {
       const context = canvas.getContext("2d");
       if (!context) throw new Error("Photo processing is unavailable in this browser.");
       context.drawImage(source, 0, 0, width, height);
-      setUploadedData(canvas.toDataURL("image/jpeg", 0.78));
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.78);
+      setUploadedData(dataUrl);
+      void analyzePhoto([], undefined, dataUrl);
     } catch (error) {
       const isHeic = /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
       setAnalysisError(error instanceof Error && !isHeic ? error.message : isHeic ? "This iPhone photo could not be converted. Please try Take a photo or upload a screenshot." : "This photo could not be prepared. Please choose another image.");
@@ -1234,15 +1236,16 @@ export default function Home() {
     }
   }
 
-  async function analyzePhoto(answers: string[] = [], review?: MealReview) {
-    if ((!uploadedData && !review) || analyzing) return;
+  async function analyzePhoto(answers: string[] = [], review?: MealReview, imageData?: string) {
+    const image = imageData ?? uploadedData;
+    if ((!image && !review) || analyzing) return;
     setAnalyzing(true);
     setAnalysisError("");
     try {
       const response = await fetch("/api/analyze-food", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: uploadedData, mode: review ? "review" : "analyze", answers, previousAnalysis: analysis, review }),
+        body: JSON.stringify({ image, mode: review ? "review" : "analyze", answers, previousAnalysis: analysis, review }),
       });
       const responseText = await response.text();
       let payload: any;
