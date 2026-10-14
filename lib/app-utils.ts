@@ -356,3 +356,51 @@ export function normalizeAnalysis(raw: any, review?: MealReview): FoodAnalysis {
     calculationMethod: ["verified_database", "nutrition_label", "mixed_sources"].includes(raw?.calculationMethod) ? raw.calculationMethod : "ai_estimate",
   };
 }
+
+// Client-side fallback for the photo-review "Update nutrition" action.
+// The review ingredients already carry per-item nutrition rescaled to the
+// confirmed grams (see Modal.updateReviewGrams), so when the verified
+// database recalculation fails (USDA rate limit, no match, network error)
+// we can still rebuild the analysis headline from those values instead of
+// leaving the big kcal/macro numbers stale next to updated grams.
+export function rescaleAnalysisToReview(analysis: FoodAnalysis | null | undefined, review?: MealReview | null): FoodAnalysis | null {
+  if (!analysis || !review || !review.ingredients.length) return null;
+  const ingredients: AnalysisIngredient[] = review.ingredients.map(item => ({
+    name: String(item.name || "Food"),
+    amountGrams: Number(item.amountGrams) || 0,
+    calories: Number(item.calories) || 0,
+    protein: Number(item.protein) || 0,
+    carbs: Number(item.carbs) || 0,
+    fat: Number(item.fat) || 0,
+    fibre: Number(item.fibre) || 0,
+    nutritionSource: item.nutritionSource,
+    calculationSource: item.calculationSource,
+    fdcId: item.fdcId,
+    labelNutrition: normalizeLabel(item.labelNutrition),
+  }));
+  const round1 = (value: number) => Math.round((value + Number.EPSILON) * 10) / 10;
+  const sum = (key: "calories" | "protein" | "carbs" | "fat" | "fibre") =>
+    ingredients.reduce((total, ingredient) => total + (Number(ingredient[key]) || 0), 0);
+  const calories = Math.round(sum("calories"));
+  const verifiedCount = ingredients.filter(item => item.calculationSource === "usda" || item.calculationSource === "nutrition_label").length;
+  const labelCount = ingredients.filter(item => item.calculationSource === "nutrition_label").length;
+  const calculationMethod: FoodAnalysis["calculationMethod"] = verifiedCount === 0
+    ? "ai_estimate"
+    : verifiedCount < ingredients.length
+      ? "mixed_sources"
+      : labelCount > 0 && labelCount < ingredients.length
+        ? "mixed_sources"
+        : labelCount === ingredients.length
+          ? "nutrition_label"
+          : "verified_database";
+  return {
+    ...analysis,
+    ingredients,
+    calories: { low: calories, high: calories, best: calories },
+    protein: round1(sum("protein")),
+    carbs: round1(sum("carbs")),
+    fat: round1(sum("fat")),
+    fibre: round1(sum("fibre")),
+    calculationMethod,
+  };
+}

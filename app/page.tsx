@@ -118,6 +118,7 @@ import {
   normalizeLabel,
   gramValue,
   normalizeAnalysis,
+  rescaleAnalysisToReview,
   SAVED_PRODUCTS_KEY,
   DAILY_MEALS_KEY,
   MEAL_HISTORY_KEY,
@@ -1261,7 +1262,16 @@ export default function Home() {
       setAnalysis(nextAnalysis);
       setModal(!review && answers.length === 0 && nextAnalysis.clarifyingQuestions.length > 0 ? "clarify" : "result");
     } catch (error) {
-      setAnalysisError(error instanceof Error ? error.message : "The photo could not be analyzed.");
+      const fallback = review ? rescaleAnalysisToReview(analysis, review) : null;
+      if (fallback) {
+        // The verified-database recalculation failed (rate limit, no match, network) —
+        // never leave the headline stale next to confirmed grams. Rebuild it from the
+        // per-item values already rescaled to the user's gram edits.
+        setAnalysis(fallback);
+        setAnalysisError("The verified food database couldn't be reached — the values were rescaled from your confirmed gram amounts instead.");
+      } else {
+        setAnalysisError(error instanceof Error ? error.message : "The photo could not be analyzed.");
+      }
       setModal(review ? "result" : answers.length > 0 ? "clarify" : "scan");
     } finally {
       setAnalyzing(false);

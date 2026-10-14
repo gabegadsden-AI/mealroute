@@ -240,7 +240,7 @@ export function Modal({ type, close, addWater, setWaterTotal, saveWaterGoal, wat
           <button className="add-ingredient" onClick={addReviewItem}>＋ Add new ingredient</button>
           <details className="hidden-calories"><summary>Oil, butter, sauces <span>Add exact grams</span></summary><p>If one is missing, select “Add new ingredient,” enter its name, then enter the grams used. MealRoute will calculate it with the rest of the confirmed meal.</p></details>
         </>}
-        {analysisError && <div className="connection-notice"><b>Couldn’t update estimate</b><span>{analysisError}</span></div>}
+        {analysisError && <div className="connection-notice"><b>Heads up</b><span>{analysisError}</span></div>}
         {reviewProblem && <div className="review-validation-hint"><b>Complete the required fields</b><span>{reviewProblem}</span></div>}
         <div className="result-actions">
           {reviewDirty ? <button className="update-result" disabled={analyzing || Boolean(reviewProblem)} onClick={recalculateReview}>{analyzing ? "Recalculating confirmed foods…" : "Update nutrition"}</button> : <><button className="log-result" onClick={() => onAddAnalysis("today")}>Log meal · {analysis.calories.best} kcal</button><button className="plan-result" onClick={() => onAddAnalysis("plan")}>Add to plan</button></>}
