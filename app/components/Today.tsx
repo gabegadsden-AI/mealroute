@@ -2,11 +2,12 @@
 import { useEffect, useState } from "react";
 import { localDateKey, dateFromKey, foodEmoji, type Meal } from "../../lib/app-utils";
 import { type MealSlot, mealSlots, mealSlotLabels } from "../../lib/weekly-plan";
+import { PhotoPicker } from "./Log";
 import { type Micronutrients, MICRONUTRIENT_LABELS, MICRONUTRIENT_UNITS, MICRONUTRIENT_DV, MICRONUTRIENT_KEYS, hasMicronutrientData } from "../../lib/micronutrients";
 
 const TOP_MICROS: (keyof Micronutrients)[] = ["calcium", "iron", "vitaminC", "vitaminD", "potassium", "sodium"];
 
-export function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onBarcode, micros, notificationPrefs, onAddIngredient, onEditIngredient, onRemoveIngredient, onDeleteMeal }: any) {
+export function Today({ meals, selectedDate, onSelectDate, consumed, protein, carbs, fat, target, macroTargets, pct, water, waterGoal, onMeal, onWater, onLog, onPhoto, onBarcode, micros, notificationPrefs, onAddIngredient, onEditIngredient, onRemoveIngredient, onDeleteMeal }: any) {
   const [today, setToday] = useState<Date | null>(null);
   useEffect(() => setToday(new Date()), []);
   const dates = today ? Array.from({ length: 7 }, (_, index) => {
@@ -72,9 +73,7 @@ export function Today({ meals, selectedDate, onSelectDate, consumed, protein, ca
       </div>
       {showMicros && <MicronutrientGrid micros={micros} />}
       <div className="overview-actions">
-        <button type="button" className="scan-meal" onClick={onLog}>
-          <b>Scan or log meal</b>
-        </button>
+        <PhotoPicker label="Scan or log meal" capture="environment" onPhoto={onPhoto} className="scan-meal" />
         <button type="button" className="scan-barcode" onClick={onBarcode}>
           <svg aria-hidden width="16" height="14" viewBox="0 0 16 14" fill="none"><rect x="0" y="0" width="1.4" height="14" fill="currentColor" /><rect x="2.6" y="0" width="0.9" height="14" fill="currentColor" /><rect x="4.7" y="0" width="1.8" height="14" fill="currentColor" /><rect x="7.7" y="0" width="0.9" height="14" fill="currentColor" /><rect x="9.6" y="0" width="1.4" height="14" fill="currentColor" /><rect x="11.8" y="0" width="0.9" height="14" fill="currentColor" /><rect x="13.5" y="0" width="1.8" height="14" fill="currentColor" /></svg>
           <b>Scan barcode</b>
@@ -84,6 +83,7 @@ export function Today({ meals, selectedDate, onSelectDate, consumed, protein, ca
           <b>{(water / 1000).toFixed(1)} / {(waterGoal / 1000).toFixed(1)}L</b>
         </button>
       </div>
+      <button type="button" className="more-log-options" onClick={onLog}>More logging options — search, saved products, previous meals ›</button>
     </section>
 
     <section className="section-block">

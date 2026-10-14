@@ -2,8 +2,8 @@
 import { type ManualFoodItem, packagedProductFood } from "../../lib/manual-food";
 import { type SavedPackagedProduct } from "../../lib/app-utils";
 
-export function PhotoPicker({ label, capture, onPhoto, secondary = false }: { label: string; capture?: "environment"; onPhoto: (file?: File) => void; secondary?: boolean }) {
-  return <label className={`photo-picker ${secondary ? "secondary" : ""}`}>
+export function PhotoPicker({ label, capture, onPhoto, secondary = false, className = "" }: { label: string; capture?: "environment"; onPhoto: (file?: File) => void; secondary?: boolean; className?: string }) {
+  return <label className={["photo-picker", secondary ? "secondary" : "", className].filter(Boolean).join(" ")}>
     <input type="file" accept="image/*" capture={capture} onChange={event => onPhoto(event.target.files?.[0])} />
     <span>{capture ? "◎" : "▧"}</span>{label}
   </label>;
