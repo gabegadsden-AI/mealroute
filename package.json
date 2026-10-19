@@ -9,6 +9,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@sentry/nextjs": "^11.8.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
     "@zxing/browser": "^0.1.5",
