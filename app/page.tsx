@@ -568,8 +568,8 @@ export default function Home() {
   }
 
   function logRecipe(recipe: Recipe) {
-    trackEvent("recipe_log", { name: recipe.name });
-    const today = localDateKey();
+    trackEvent("recipe_log", { name: recipe.name, backdated: Boolean(selectedDate && selectedDate !== localDateKey()) });
+    const date = selectedDate || localDateKey();
     const newMeal: Meal = {
       id: Date.now() + Math.floor(Math.random() * 1000),
       type: "Recipe",
@@ -586,9 +586,11 @@ export default function Home() {
       ingredients: recipe.ingredients.map(ing => ({ name: ing.name, amountGrams: ing.grams })),
       micros: recipe.micros && Object.values(recipe.micros).some(v => v > 0) ? recipe.micros : undefined,
     };
-    const updated = { ...mealHistory, [today]: [...(mealHistory[today] || []), newMeal] };
+    const updated = { ...mealHistory, [date]: [...(mealHistory[date] || []), newMeal] };
     setMealHistory(updated);
-    saveMealState(updated, plannedMeals, `Logged 1 serving of ${recipe.name} 🍽️`);
+    setSelectedDate(date);
+    const loggedForLabel = dateFromKey(date).toLocaleDateString([], { day: "numeric", month: "short" });
+    saveMealState(updated, plannedMeals, date === localDateKey() ? `Logged 1 serving of ${recipe.name} 🍽️` : `Logged 1 serving of ${recipe.name} for ${loggedForLabel} 🍽️`);
     setTab("today");
   }
 
@@ -979,8 +981,8 @@ export default function Home() {
   }
 
   async function logPreviousMeal(source: Meal) {
-    trackEvent("previous_meal_log", { meal_name: source.name });
-    const today = localDateKey();
+    trackEvent("previous_meal_log", { meal_name: source.name, backdated: Boolean(selectedDate && selectedDate !== localDateKey()) });
+    const date = selectedDate || localDateKey();
     const { plannedDate: _plannedDate, mealSlot: _mealSlot, locked: _locked, ...mealDetails } = source;
     const loggedMeal: Meal = {
       ...mealDetails,
@@ -989,12 +991,13 @@ export default function Home() {
       time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       eaten: true,
     };
-    const nextHistory = { ...mealHistory, [today]: [...(mealHistory[today] || []), loggedMeal] };
+    const nextHistory = { ...mealHistory, [date]: [...(mealHistory[date] || []), loggedMeal] };
     setMealHistory(nextHistory);
-    setSelectedDate(today);
+    setSelectedDate(date);
     setModal(null);
     setTab("today");
-    await saveMealState(nextHistory, plannedMeals, `${source.name} logged again and saved to your account`);
+    const loggedForLabel = dateFromKey(date).toLocaleDateString([], { day: "numeric", month: "short" });
+    await saveMealState(nextHistory, plannedMeals, date === localDateKey() ? `${source.name} logged again and saved to your account` : `${source.name} logged for ${loggedForLabel} and saved to your account`);
   }
 
   function openAddIngredient(meal: Meal) {
@@ -1321,11 +1324,12 @@ export default function Home() {
 
     let mealSaved: boolean;
     if (destination === "today") {
-      const today = localDateKey();
-      const nextHistory = { ...mealHistory, [today]: [...(mealHistory[today] || []), nextMeal] };
+      const date = selectedDate || localDateKey();
+      const nextHistory = { ...mealHistory, [date]: [...(mealHistory[date] || []), nextMeal] };
       setMealHistory(nextHistory);
-      setSelectedDate(today);
-      mealSaved = await saveMealState(nextHistory, plannedMeals, `${food.name} logged with ${nutrition.grams}g`);
+      setSelectedDate(date);
+      const loggedForLabel = dateFromKey(date).toLocaleDateString([], { day: "numeric", month: "short" });
+      mealSaved = await saveMealState(nextHistory, plannedMeals, date === localDateKey() ? `${food.name} logged with ${nutrition.grams}g` : `${food.name} logged with ${nutrition.grams}g for ${loggedForLabel}`);
     } else {
       if (plannedDate && mealSlot) {
         nextMeal.type = mealSlotLabels[mealSlot];
@@ -1385,11 +1389,12 @@ export default function Home() {
     let savePromise: Promise<boolean>;
     let nextPlannedMeals: Meal[] | null = null;
     if (destination === "today") {
-      const today = localDateKey();
-      const nextHistory = { ...mealHistory, [today]: [...(mealHistory[today] || []), nextMeal] };
+      const date = selectedDate || localDateKey();
+      const nextHistory = { ...mealHistory, [date]: [...(mealHistory[date] || []), nextMeal] };
       setMealHistory(nextHistory);
-      setSelectedDate(today);
-      savePromise = saveMealState(nextHistory, plannedMeals, `${analysis.mealName} logged and saved to your account`);
+      setSelectedDate(date);
+      const loggedForLabel = dateFromKey(date).toLocaleDateString([], { day: "numeric", month: "short" });
+      savePromise = saveMealState(nextHistory, plannedMeals, date === localDateKey() ? `${analysis.mealName} logged and saved to your account` : `${analysis.mealName} logged for ${loggedForLabel} and saved to your account`);
     } else {
       const nextPlan = [...plannedMeals, nextMeal];
       setPlannedMeals(nextPlan);
@@ -1403,6 +1408,10 @@ export default function Home() {
   }
 
   const selectedDateLabel = selectedDate ? dateFromKey(selectedDate).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }) : "";
+  const backfillNotice = selectedDate && selectedDate !== localDateKey() ? {
+    dateLabel: dateFromKey(selectedDate).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" }),
+    onSwitchToToday: () => setSelectedDate(localDateKey()),
+  } : null;
   const activeGroceryWeek = isDateKey(groceryWeekStart) ? weekStartKey(groceryWeekStart) : weekStartKey();
   const groceryWeekLabel = weekRangeLabel(activeGroceryWeek);
   const topbarContext = tab === "grocery"
@@ -1584,7 +1593,7 @@ export default function Home() {
         <button className="primary full" disabled={importingLegacy} onClick={importLegacyData}>{importingLegacy ? "Importing securely…" : "Import to my account"}</button>
         <button className="text-button" disabled={importingLegacy} onClick={skipLegacyImport}>Keep this account separate</button>
       </section></div>}
-      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} onManualSearch={(mode: "search" | "saved" | "custom") => openManualFood(mode)} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} onSaveProfileDietary={saveProfileDietary} onSaveProfileNotifications={saveProfileNotifications} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} previousMeals={previousMeals} onLogPrevious={logPreviousMeal} editingMealName={editingMealContext?.meal.name} onAddIngredientToMeal={addIngredientToMeal} todaysMeals={meals} onAddToExistingMeal={addManualFoodToExistingMeal} />}
+      {modal && <Modal type={modal} close={() => setModal(null)} addWater={addWater} setWaterTotal={saveWaterTotal} saveWaterGoal={saveWaterGoal} water={water} waterGoal={waterGoal} waterDate={selectedDate || localDateKey()} next={setModal} notify={notify} onManualSearch={(mode: "search" | "saved" | "custom") => openManualFood(mode)} onPhoto={usePhoto} uploadedPhoto={uploadedPhoto} uploadedData={uploadedData} analysis={analysis} analyzing={analyzing} analysisError={analysisError} onAnalyze={analyzePhoto} onAddAnalysis={addAnalyzedMeal} profile={profile} target={target} macroTargets={macroTargets} onLogout={logout} loggingOut={loggingOut} savedProducts={savedProducts} onSaveProducts={(products: SavedPackagedProduct[]) => { setSavedProducts(products); void saveProductState(products); }} onSaveProfileGoals={saveProfileGoals} onSaveProfileMacros={saveProfileMacros} onSaveProfileDietary={saveProfileDietary} onSaveProfileNotifications={saveProfileNotifications} weightLogs={weightLogs} onSaveWeight={saveWeightEntry} onDeleteWeight={deleteWeightEntry} manualStartMode={manualStartMode} manualInitialFood={manualInitialFood} recentFoods={recentFoods} onAddManualFood={addManualFood} previousMeals={previousMeals} onLogPrevious={logPreviousMeal} editingMealName={editingMealContext?.meal.name} onAddIngredientToMeal={addIngredientToMeal} todaysMeals={meals} onAddToExistingMeal={addManualFoodToExistingMeal} backfillNotice={backfillNotice} />}
       <LegalFooter />
     </main>
   );
