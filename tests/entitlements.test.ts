@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeEntitlement,
   isProUser,
+  SCHEMA_LAG_STATUS,
   TRIAL_DAYS,
   FREE_PLAN_LIMIT_DAYS,
   type SubscriptionFields,
@@ -87,5 +88,19 @@ describe("isProUser — server-side gate helper", () => {
 
   it("grandfathered flag alone grants access", () => {
     expect(isProUser({ trial_ends_at: null, subscription_status: "canceled", current_period_end: null, is_grandfathered: true }, now)).toBe(true);
+  });
+});
+
+describe("computeEntitlement — schema lag (code deployed before migration)", () => {
+  it("subscription columns missing → permissive Pro so nobody loses features", () => {
+    const e = computeEntitlement({ trial_ends_at: null, subscription_status: SCHEMA_LAG_STATUS, current_period_end: null, is_grandfathered: null }, now);
+    expect(e.isPro).toBe(true);
+    expect(e.state).toBe("pro");
+    expect(e.maxPlanDays).toBe(7);
+  });
+
+  it("schema lag beats an expired trial", () => {
+    const e = computeEntitlement({ trial_ends_at: daysFromNow(-99), subscription_status: SCHEMA_LAG_STATUS, current_period_end: null, is_grandfathered: null }, now);
+    expect(e.isPro).toBe(true);
   });
 });

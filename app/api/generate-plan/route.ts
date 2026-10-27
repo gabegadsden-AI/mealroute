@@ -1,5 +1,5 @@
 import { createClient } from "../../../lib/supabase/server";
-import { computeEntitlement } from "../../../lib/entitlements";
+import { computeEntitlement, SCHEMA_LAG_STATUS } from "../../../lib/entitlements";
 
 type GeneratePlanRequest = {
   days?: number;
@@ -99,14 +99,24 @@ export async function POST(request: Request) {
       : new Date().toISOString().slice(0, 10);
 
     // Load user profile (including subscription state for the plan-length gate)
-    const { data: profile, error: profileError } = await supabase
+    let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("calorie_goal,protein_goal_g,carbs_goal_g,fat_goal_g,primary_goal,suggested_calorie_goal,diet_type,allergies,trial_ends_at,subscription_status,current_period_end,is_grandfathered")
       .eq("user_id", userId)
       .single();
 
     if (profileError || !profile) {
-      return Response.json({ error: "Complete onboarding first so we know your calorie target." }, { status: 400 });
+      // Schema lag (subscription columns not migrated yet): retry without
+      // them; entitlements then run in permissive mode.
+      const retry = await supabase
+        .from("profiles")
+        .select("calorie_goal,protein_goal_g,carbs_goal_g,fat_goal_g,primary_goal,suggested_calorie_goal,diet_type,allergies")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (retry.error || !retry.data) {
+        return Response.json({ error: "Complete onboarding first so we know your calorie target." }, { status: 400 });
+      }
+      profile = { ...retry.data, subscription_status: SCHEMA_LAG_STATUS } as NonNullable<typeof profile>;
     }
 
     // Plan length gate: free plans cap at 3 days, Pro unlocks the full week.

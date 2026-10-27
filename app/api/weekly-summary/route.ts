@@ -1,6 +1,6 @@
 import { createClient } from "../../../lib/supabase/server";
 import { buildWeeklySummary, renderWeeklySummaryHTML } from "../../../lib/weekly-summary";
-import { profileSelect, type MealRouteProfile } from "../../../lib/profile";
+import { profileSelect, legacyProfileSelect, type MealRouteProfile } from "../../../lib/profile";
 import { weekStartKey } from "../../../lib/weekly-plan";
 
 type SummaryRequest = {
@@ -21,11 +21,20 @@ export async function POST(request: Request) {
     const weekStart = body.weekStart || weekStartKey(new Date());
 
     // Load profile for calorie goal
-    const { data: profileData } = await supabase
+    let { data: profileData, error: profileError } = await supabase
       .from("profiles")
       .select(profileSelect)
       .eq("user_id", data.user.id)
       .maybeSingle();
+    if (profileError || !profileData) {
+      // Schema lag: subscription columns may not exist yet — retry without them.
+      const retry = await supabase
+        .from("profiles")
+        .select(legacyProfileSelect)
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      if (!retry.error && retry.data) profileData = retry.data as typeof profileData;
+    }
 
     const profile = profileData as MealRouteProfile | null;
     const goalCalories = Number(profile?.calorie_goal || profile?.suggested_calorie_goal || 0);

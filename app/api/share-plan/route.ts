@@ -35,12 +35,13 @@ export async function POST(request: Request) {
     }
 
     // Pro gate: plan sharing is a paid feature.
-    const { data: subProfile } = await supabase
+    const { data: subProfile, error: subError } = await supabase
       .from("profiles")
       .select("trial_ends_at,subscription_status,current_period_end,is_grandfathered")
       .eq("user_id", data.user.id)
       .single();
-    if (!isProUser(subProfile)) {
+    // Fetch error (schema lag / transient): fail open rather than paywalling.
+    if (!subError && !isProUser(subProfile)) {
       return Response.json(
         { error: "Plan sharing is a MealRoute Pro feature. Upgrade to share your plan.", code: "upgrade_required" },
         { status: 402 },

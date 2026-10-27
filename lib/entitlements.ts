@@ -24,6 +24,14 @@ export type SubscriptionFields = {
 
 export type PlanState = "grandfathered" | "pro" | "trialing" | "free";
 
+/**
+ * Synthetic status used when the subscription columns are missing from the
+ * profiles table (deployment ahead of migration). Billing can't function in
+ * that state anyway, so entitlements stay permissive: nobody loses features
+ * while the schema catches up.
+ */
+export const SCHEMA_LAG_STATUS = "schema_lag";
+
 export type Entitlement = {
   isPro: boolean;
   state: PlanState;
@@ -46,6 +54,12 @@ export function computeEntitlement(
   const trialEnd = fields?.trial_ends_at ? new Date(fields.trial_ends_at) : null;
   const trialDaysLeft = trialEnd ? daysBetween(now, trialEnd) : 0;
   const status = fields?.subscription_status ?? "trialing";
+
+  // Schema lag (code deployed before the migration): keep every feature
+  // open. The paywall is meaningless until Stripe keys + columns exist.
+  if (status === SCHEMA_LAG_STATUS) {
+    return { isPro: true, state: "pro", trialDaysLeft: 0, trialEndsSoon: false, maxPlanDays: 7 };
+  }
 
   // Grandfathered beta testers: Pro forever.
   if (fields?.is_grandfathered) {

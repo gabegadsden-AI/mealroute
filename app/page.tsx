@@ -49,7 +49,7 @@ import {
   type GroceryUnit,
   type PlannedIngredient,
 } from "../lib/grocery-list";
-import { profileSelect, type MealRouteProfile } from "../lib/profile";
+import { profileSelect, legacyProfileSelect, type MealRouteProfile } from "../lib/profile";
 import { createClient } from "../lib/supabase/client";
 import {
   loadWeightLogs,
@@ -93,7 +93,7 @@ import { WeeklySummary } from "./components/WeeklySummary";
 import { RecipeCreator } from "./components/RecipeCreator";
 import { UpgradePrompt, type UpgradeFeature } from "./components/UpgradePrompt";
 import { PlanBanner } from "./components/PlanBanner";
-import { computeEntitlement, PRO_PRICE_MONTHLY_USD, PRO_PRICE_ANNUAL_USD } from "../lib/entitlements";
+import { computeEntitlement, PRO_PRICE_MONTHLY_USD, PRO_PRICE_ANNUAL_USD, SCHEMA_LAG_STATUS } from "../lib/entitlements";
 import { type Recipe } from "../lib/recipes";
 import { initAnalytics, identifyUser, resetUser, trackScreenView, trackEvent } from "../lib/analytics";
 
@@ -161,6 +161,7 @@ export default function Home() {
   const [userId, setUserId] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
   const [dataReady, setDataReady] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [mealHistory, setMealHistory] = useState<MealHistory>({});
   const [plannedMeals, setPlannedMeals] = useState<Meal[]>([]);
   const [planWeekStart, setPlanWeekStart] = useState("");
@@ -277,7 +278,7 @@ export default function Home() {
         return;
       }
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("profiles")
         .select(profileSelect)
         .eq("user_id", userData.user.id)
@@ -285,8 +286,30 @@ export default function Home() {
 
       if (!active) return;
       if (error) {
-        notify("Your profile could not be loaded. Please refresh and try again.");
-        return;
+        // Schema lag (subscription columns not migrated yet) or a transient
+        // failure: retry without the subscription columns so the app still
+        // loads. Entitlements fall back to permissive mode in that case.
+        const retry = await supabase
+          .from("profiles")
+          .select(legacyProfileSelect)
+          .eq("user_id", userData.user.id)
+          .maybeSingle();
+        if (!active) return;
+        if (retry.error || !retry.data) {
+          // Hard failure: show an actionable error screen — never a silent
+          // infinite loader.
+          notify("Your account could not be loaded. Check your connection and retry.");
+          setLoadFailed(true);
+          return;
+        }
+        data = {
+          ...retry.data,
+          trial_ends_at: null,
+          subscription_status: SCHEMA_LAG_STATUS,
+          subscription_interval: null,
+          current_period_end: null,
+          is_grandfathered: null,
+        } as typeof data;
       }
       if (!data?.onboarding_completed) {
         window.location.replace("/onboarding");
@@ -405,7 +428,10 @@ export default function Home() {
       if (active) setDataReady(true);
     }
 
-    void loadAccount();
+    loadAccount().catch((err) => {
+      console.error("[loadAccount] unexpected failure", err);
+      setLoadFailed(true);
+    });
     return () => {
       active = false;
     };
@@ -1472,7 +1498,9 @@ export default function Home() {
         </header>
 
         <div className="content">
-          {!dataReady
+          {loadFailed
+            ? <div className="history-empty"><strong>We couldn’t load your account</strong><span>Check your internet connection, then retry. If it keeps failing, your data is safe — this only affects loading, not what’s saved.</span><button className="primary" style={{ marginTop: "14px" }} onClick={() => window.location.reload()}>Retry</button></div>
+            : !dataReady
             ? <div className="history-empty"><strong>Loading your MealRoute account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
             : <>
               <PlanBanner
