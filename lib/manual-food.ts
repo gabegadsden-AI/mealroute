@@ -145,20 +145,32 @@ export function customFoodKey(food: Omit<ManualFoodItem, "sourceKey">) {
   return `custom:${normalizedName || "food"}:${nutritionKey}`;
 }
 
+const BASE_SELECT_COLUMNS = `source_key,source_type,name,brand_name,fdc_id,calories_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fibre_per_100g,nutrition_source,times_used,last_used_at,last_grams`;
 const SELECT_COLUMNS = `source_key,source_type,name,brand_name,fdc_id,calories_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fibre_per_100g,${MICRO_COLUMNS},nutrition_source,times_used,last_used_at,last_grams`
 
 export async function loadRecentFoods(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<ManualFoodItem[]> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("recent_foods")
     .select(SELECT_COLUMNS)
     .eq("user_id", userId)
     .order("last_used_at", { ascending: false })
     .limit(30);
 
-  if (error) throw error;
+  if (error) {
+    // Schema lag: the micronutrient columns may not exist yet (migration
+    // pending). Recent foods still work without micro values.
+    const retry = await supabase
+      .from("recent_foods")
+      .select(BASE_SELECT_COLUMNS)
+      .eq("user_id", userId)
+      .order("last_used_at", { ascending: false })
+      .limit(30);
+    if (retry.error) throw retry.error;
+    data = retry.data as unknown as typeof data;
+  }
   return (data || []).map(row => normalizeRecentFood(row));
 }
 
@@ -170,45 +182,60 @@ export async function saveRecentFood(
   grams: number,
 ): Promise<ManualFoodItem> {
   const micros = food.micros || EMPTY_MICRONUTRIENTS;
-  const { data, error } = await supabase
+  const baseRow = {
+    user_id: userId,
+    source_key: food.sourceKey.slice(0, 220),
+    source_type: food.sourceType,
+    name: food.name.slice(0, 160),
+    brand_name: food.brandName?.slice(0, 160) || null,
+    fdc_id: food.fdcId || null,
+    calories_per_100g: food.caloriesPer100g,
+    protein_per_100g: food.proteinPer100g,
+    carbs_per_100g: food.carbsPer100g,
+    fat_per_100g: food.fatPer100g,
+    fibre_per_100g: food.fibrePer100g,
+    nutrition_source: food.nutritionSource.slice(0, 240),
+    times_used: Math.max(1, previousUseCount + 1),
+    last_grams: Math.min(5000, Math.max(1, Math.round(grams * 10) / 10)),
+    last_used_at: new Date().toISOString(),
+  };
+  const microRow = {
+    micro_vitamin_a: micros.vitaminA,
+    micro_vitamin_c: micros.vitaminC,
+    micro_vitamin_d: micros.vitaminD,
+    micro_vitamin_e: micros.vitaminE,
+    micro_vitamin_k: micros.vitaminK,
+    micro_thiamin: micros.thiamin,
+    micro_riboflavin: micros.riboflavin,
+    micro_niacin: micros.niacin,
+    micro_vitamin_b6: micros.vitaminB6,
+    micro_folate: micros.folate,
+    micro_vitamin_b12: micros.vitaminB12,
+    micro_calcium: micros.calcium,
+    micro_iron: micros.iron,
+    micro_magnesium: micros.magnesium,
+    micro_potassium: micros.potassium,
+    micro_zinc: micros.zinc,
+    micro_sodium: micros.sodium,
+  };
+
+  let { data, error } = await supabase
     .from("recent_foods")
-    .upsert({
-      user_id: userId,
-      source_key: food.sourceKey.slice(0, 220),
-      source_type: food.sourceType,
-      name: food.name.slice(0, 160),
-      brand_name: food.brandName?.slice(0, 160) || null,
-      fdc_id: food.fdcId || null,
-      calories_per_100g: food.caloriesPer100g,
-      protein_per_100g: food.proteinPer100g,
-      carbs_per_100g: food.carbsPer100g,
-      fat_per_100g: food.fatPer100g,
-      fibre_per_100g: food.fibrePer100g,
-      micro_vitamin_a: micros.vitaminA,
-      micro_vitamin_c: micros.vitaminC,
-      micro_vitamin_d: micros.vitaminD,
-      micro_vitamin_e: micros.vitaminE,
-      micro_vitamin_k: micros.vitaminK,
-      micro_thiamin: micros.thiamin,
-      micro_riboflavin: micros.riboflavin,
-      micro_niacin: micros.niacin,
-      micro_vitamin_b6: micros.vitaminB6,
-      micro_folate: micros.folate,
-      micro_vitamin_b12: micros.vitaminB12,
-      micro_calcium: micros.calcium,
-      micro_iron: micros.iron,
-      micro_magnesium: micros.magnesium,
-      micro_potassium: micros.potassium,
-      micro_zinc: micros.zinc,
-      micro_sodium: micros.sodium,
-      nutrition_source: food.nutritionSource.slice(0, 240),
-      times_used: Math.max(1, previousUseCount + 1),
-      last_grams: Math.min(5000, Math.max(1, Math.round(grams * 10) / 10)),
-      last_used_at: new Date().toISOString(),
-    }, { onConflict: "user_id,source_key" })
+    .upsert({ ...baseRow, ...microRow }, { onConflict: "user_id,source_key" })
     .select(SELECT_COLUMNS)
     .single();
 
-  if (error || !data) throw error || new Error("The recent food could not be saved.");
+  if (error) {
+    // Schema lag: micronutrient columns may not exist yet (migration
+    // pending). Save without micros rather than losing the entry.
+    const retry = await supabase
+      .from("recent_foods")
+      .upsert(baseRow, { onConflict: "user_id,source_key" })
+      .select(BASE_SELECT_COLUMNS)
+      .single();
+    if (retry.error || !retry.data) throw retry.error || error;
+    return normalizeRecentFood(retry.data);
+  }
+  if (!data) throw new Error("The recent food could not be saved.");
   return normalizeRecentFood(data);
 }
