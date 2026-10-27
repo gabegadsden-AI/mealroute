@@ -1,4 +1,5 @@
 import { createClient } from "../../../lib/supabase/server";
+import { isProUser } from "../../../lib/entitlements";
 import {
   createSharedPlan,
   listUserSharedPlans,
@@ -31,6 +32,19 @@ export async function POST(request: Request) {
 
     if (!meals.length) {
       return Response.json({ error: "Add meals to your plan before sharing." }, { status: 400 });
+    }
+
+    // Pro gate: plan sharing is a paid feature.
+    const { data: subProfile } = await supabase
+      .from("profiles")
+      .select("trial_ends_at,subscription_status,current_period_end,is_grandfathered")
+      .eq("user_id", data.user.id)
+      .single();
+    if (!isProUser(subProfile)) {
+      return Response.json(
+        { error: "Plan sharing is a MealRoute Pro feature. Upgrade to share your plan.", code: "upgrade_required" },
+        { status: 402 },
+      );
     }
 
     const shared = await createSharedPlan(supabase, data.user.id, meals, planTitle, weekStart);

@@ -22,7 +22,13 @@ export type MealRouteProfile = {
   onboarding_step: number;
   onboarding_completed: boolean;
   local_import_status: "pending" | "imported" | "skipped";
+  // Pro trial + Stripe subscription state
+  trial_ends_at: string | null;
+  subscription_status: string | null;
+  subscription_interval: string | null;
+  current_period_end: string | null;
+  is_grandfathered: boolean | null;
   created_at: string;
 };
 
-export const profileSelect = "user_id,name,weight_kg,height_cm,weight_unit,height_unit,primary_goal,age,calculation_sex,activity_level,calorie_goal,suggested_calorie_goal,protein_goal_g,carbs_goal_g,fat_goal_g,macro_targets_custom,diet_type,allergies,notification_prefs,water_goal_ml,onboarding_step,onboarding_completed,local_import_status,created_at" as const;
+export const profileSelect = "user_id,name,weight_kg,height_cm,weight_unit,height_unit,primary_goal,age,calculation_sex,activity_level,calorie_goal,suggested_calorie_goal,protein_goal_g,carbs_goal_g,fat_goal_g,macro_targets_custom,diet_type,allergies,notification_prefs,water_goal_ml,onboarding_step,onboarding_completed,local_import_status,trial_ends_at,subscription_status,subscription_interval,current_period_end,is_grandfathered,created_at" as const;

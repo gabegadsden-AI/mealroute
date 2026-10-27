@@ -215,7 +215,11 @@ export default function TermsOfService() {
         </div>
 
         <div style={styles.section}>
-          <h2 style={styles.h2}>8. Third-Party Services</h2>
+          <h2 style={styles.h2}>8. Subscriptions &amp; Billing</h2>
+          <p style={styles.p}>MealRoute offers a Pro subscription (currently US$6.99/month or US$49/year, or promotional pricing as displayed at purchase time) that unlocks premium features such as AI photo analysis, full-week AI meal plans, the Recipe Creator, and plan sharing. New accounts include a 7-day Pro trial that requires no payment method; when the trial ends, your account automatically returns to the Free plan with no charge.</p>
+          <p style={styles.p}>Subscriptions are billed in advance through our payment processor, Stripe. You may cancel anytime from the billing portal in the app; cancellation stops future renewals and your Pro features remain available until the end of the paid period, after which your account reverts to the Free plan. Your data — meal history, plans, and saved products — remains available to you on the Free plan after cancellation or non-renewal. We may change Pro pricing for new subscribers; any change to your then-current price will be communicated in advance.</p>
+
+          <h2 style={styles.h2}>9. Third-Party Services</h2>
           <p style={styles.p}>
             MealRoute integrates with third-party services including but not limited to:
           </p>
@@ -230,14 +234,14 @@ export default function TermsOfService() {
         </div>
 
         <div style={styles.section}>
-          <h2 style={styles.h2}>9. Service Availability</h2>
+          <h2 style={styles.h2}>10. Service Availability</h2>
           <p style={styles.p}>
             We strive to maintain high availability but do not guarantee uninterrupted access. The Service may experience downtime for maintenance, updates, or reasons beyond our control.
           </p>
         </div>
 
         <div style={styles.section}>
-          <h2 style={styles.h2}>10. Limitation of Liability</h2>
+          <h2 style={styles.h2}>11. Limitation of Liability</h2>
           <p style={styles.p}>
             MealRoute is provided &quot;as is&quot; and &quot;as available&quot; without warranties of any kind, express or implied. To the fullest extent permitted by law, we are not liable for:
           </p>
@@ -250,14 +254,14 @@ export default function TermsOfService() {
         </div>
 
         <div style={styles.section}>
-          <h2 style={styles.h2}>11. Account Termination</h2>
+          <h2 style={styles.h2}>12. Account Termination</h2>
           <p style={styles.p}>
             You may delete your account at any time. We reserve the right to suspend or terminate accounts that violate these Terms or pose a risk to the Service or other users.
           </p>
         </div>
 
         <div style={styles.section}>
-          <h2 style={styles.h2}>12. Changes to These Terms</h2>
+          <h2 style={styles.h2}>13. Changes to These Terms</h2>
           <p style={styles.p}>
             We may update these Terms from time to time. We will notify users of significant changes through the app or by email. Continued use of the Service after changes take effect constitutes acceptance of the updated Terms.
           </p>

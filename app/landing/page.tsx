@@ -186,6 +186,7 @@ export default function LandingPage() {
             <Link href="/auth/login">Log in</Link>
             <Link href="/auth/signup">Sign up</Link>
             <a href="#features">Features</a>
+            <a href="/pricing">Pricing</a>
             <a href="#how">How it works</a>
           </div>
           <p className="landing-footer-text">© 2026 MealRoute. All rights reserved. Nutrition values are estimates and not guaranteed.</p>

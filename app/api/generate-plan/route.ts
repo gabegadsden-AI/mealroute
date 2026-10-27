@@ -1,4 +1,5 @@
 import { createClient } from "../../../lib/supabase/server";
+import { computeEntitlement } from "../../../lib/entitlements";
 
 type GeneratePlanRequest = {
   days?: number;
@@ -93,21 +94,24 @@ export async function POST(request: Request) {
     const userId = authData.user.id;
 
     const body = (await request.json()) as GeneratePlanRequest;
-    const numDays = Math.min(7, Math.max(1, Math.round(Number(body.days) || 3)));
     const startDate = body.startDate && /^\d{4}-\d{2}-\d{2}$/.test(body.startDate)
       ? body.startDate
       : new Date().toISOString().slice(0, 10);
 
-    // Load user profile
+    // Load user profile (including subscription state for the plan-length gate)
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("calorie_goal,protein_goal_g,carbs_goal_g,fat_goal_g,primary_goal,suggested_calorie_goal,diet_type,allergies")
+      .select("calorie_goal,protein_goal_g,carbs_goal_g,fat_goal_g,primary_goal,suggested_calorie_goal,diet_type,allergies,trial_ends_at,subscription_status,current_period_end,is_grandfathered")
       .eq("user_id", userId)
       .single();
 
     if (profileError || !profile) {
       return Response.json({ error: "Complete onboarding first so we know your calorie target." }, { status: 400 });
     }
+
+    // Plan length gate: free plans cap at 3 days, Pro unlocks the full week.
+    const entitlement = computeEntitlement(profile);
+    const maxDays = entitlement.maxPlanDays;
 
     // Load user food preferences (palette)
     const { data: preferences, error: prefError } = await supabase
@@ -123,6 +127,8 @@ export async function POST(request: Request) {
         error: "Add at least 1 food to your palette first. Go to the Plan tab → My Foods."
       }, { status: 400 });
     }
+
+    const numDays = Math.min(maxDays, Math.max(1, Math.round(Number(body.days) || 3)));
 
     // Build date list
     const dates: string[] = [];

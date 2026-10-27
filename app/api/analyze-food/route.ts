@@ -1,4 +1,5 @@
 import { calculateVerifiedIngredients } from "./nutrition-calculator";
+import { isProUser } from "../../../lib/entitlements";
 import { createClient } from "../../../lib/supabase/server";
 
 type AnalyzeRequest = {
@@ -70,6 +71,22 @@ export async function POST(request: Request) {
     }
     if (!isReview && body.image!.length > 10_000_000) {
       return Response.json({ error: "This photo is too large. Please choose an image under 7 MB." }, { status: 413 });
+    }
+
+    // Pro gate: fresh AI photo analysis is the paid feature; "review" mode
+    // (finishing/adjusting an existing analysis) stays open for everyone.
+    if (!isReview) {
+      const { data: subProfile } = await supabase
+        .from("profiles")
+        .select("trial_ends_at,subscription_status,current_period_end,is_grandfathered")
+        .eq("user_id", authData.user.id)
+        .single();
+      if (!isProUser(subProfile)) {
+        return Response.json(
+          { error: "AI photo analysis is a MealRoute Pro feature. Upgrade to keep scanning.", code: "upgrade_required" },
+          { status: 402 },
+        );
+      }
     }
 
     const runtimeEnv = process.env as Record<string, string | undefined>;

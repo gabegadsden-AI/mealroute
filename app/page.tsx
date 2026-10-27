@@ -91,6 +91,9 @@ import FoodPalette, { type PaletteFood } from "./components/FoodPalette";
 import PlanReview, { type PlanMeal, type GeneratedPlan } from "./components/PlanReview";
 import { WeeklySummary } from "./components/WeeklySummary";
 import { RecipeCreator } from "./components/RecipeCreator";
+import { UpgradePrompt, type UpgradeFeature } from "./components/UpgradePrompt";
+import { PlanBanner } from "./components/PlanBanner";
+import { computeEntitlement, PRO_PRICE_MONTHLY_USD, PRO_PRICE_ANNUAL_USD } from "../lib/entitlements";
 import { type Recipe } from "../lib/recipes";
 import { initAnalytics, identifyUser, resetUser, trackScreenView, trackEvent } from "../lib/analytics";
 
@@ -174,6 +177,7 @@ export default function Home() {
   const [manualStartMode, setManualStartMode] = useState<"search" | "saved" | "custom">("search");
   const [manualInitialFood, setManualInitialFood] = useState<ManualFoodItem | null>(null);
   const [toast, setToast] = useState("");
+  const [upgradeFeature, setUpgradeFeature] = useState<UpgradeFeature | null>(null);
   const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
   const [groceryReady, setGroceryReady] = useState(false);
   const [range, setRange] = useState("Week");
@@ -248,6 +252,17 @@ export default function Home() {
     return suggestedMacros;
   }, [profile?.macro_targets_custom, profile?.protein_goal_g, profile?.carbs_goal_g, profile?.fat_goal_g, suggestedMacros]);
   const pct = Math.min(100, Math.round((consumed / target) * 100));
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upgraded") === "1") {
+      notify("Welcome to MealRoute Pro! 🎉 Everything is unlocked.");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (params.get("manage") === "1") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -529,7 +544,19 @@ export default function Home() {
     window.setTimeout(() => setToast(""), 2200);
   }
 
+  async function openBillingPortal() {
+    try {
+      const res = await fetch("/api/stripe/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) { window.location.href = data.url; return; }
+      notify(data.error || "Could not open billing portal.");
+    } catch {
+      notify("Could not open billing portal.");
+    }
+  }
+
   async function sharePlan() {
+    if (!isPro) { setUpgradeFeature("planSharing"); return; }
     if (!plannedMeals.length) {
       notify("Add meals to your plan before sharing.");
       return;
@@ -1195,6 +1222,7 @@ export default function Home() {
 
   async function usePhoto(file: File | undefined) {
     if (!file) return;
+    if (!isPro) { setUpgradeFeature("photoAnalysis"); return; }
     trackEvent("photo_scan_start");
     setAnalysis(null);
     setAnalysisError("");
@@ -1417,6 +1445,9 @@ export default function Home() {
   const topbarContext = tab === "grocery"
     ? `GROCERIES FOR ${groceryWeekLabel.toUpperCase()}`
     : selectedDateLabel ? selectedDateLabel.toUpperCase() : "YOUR NUTRITION";
+  const entitlement = computeEntitlement(profile);
+  const isPro = entitlement.isPro;
+
   const title = tab === "today" ? !selectedDate || selectedDate === localDateKey() ? "Today" : selectedDateLabel : tab === "plan" ? "My Plan" : tab === "grocery" ? "Grocery List" : tab === "recipes" ? "Recipes" : "History";
   const legacyMealCount = legacyImport
     ? Object.values(legacyImport.days).reduce((count, dayMeals) => count + dayMeals.length, 0) + legacyImport.planned.length
@@ -1444,6 +1475,16 @@ export default function Home() {
           {!dataReady
             ? <div className="history-empty"><strong>Loading your MealRoute account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
             : <>
+              <PlanBanner
+                state={entitlement.state}
+                trialDaysLeft={entitlement.trialDaysLeft}
+                trialEndsSoon={entitlement.trialEndsSoon}
+                subscriptionStatus={profile?.subscription_status ?? null}
+                onUpgrade={() => setUpgradeFeature("general")}
+                onPricing={() => { window.location.href = "/pricing"; }}
+                onManage={() => void openBillingPortal()}
+              />
+
               <ProfileCompletionBanner
                 hasCalorieGoal={!!(profile?.calorie_goal && Number(profile.calorie_goal) > 0)}
                 hasMacroGoals={profile?.protein_goal_g !== null && profile?.carbs_goal_g !== null && profile?.fat_goal_g !== null}
@@ -1484,15 +1525,18 @@ export default function Home() {
                             : "Generate a balanced meal plan from your food palette, calibrated to your calorie and macro targets."}
                         </p>
                         <div style={{ display: "flex", gap: "8px" }}>
-                          {[3, 5, 7].map(d => (
-                            <button key={d} disabled={generatingPlan || foodPalette.length < 3} onClick={() => void handleGeneratePlan(d)} style={{
-                              flex: 1, padding: "12px", borderRadius: "14px", fontSize: "12px", fontWeight: 700,
-                              border: foodPalette.length < 3 ? "1px solid #dfe6e0" : "none",
-                              background: foodPalette.length < 3 ? "transparent" : "var(--green)",
-                              color: foodPalette.length < 3 ? "#9aa49d" : "#1c2920",
-                              opacity: generatingPlan ? 0.6 : 1,
-                            }}>{generatingPlan ? "..." : `${d} days`}</button>
-                          ))}
+                          {[3, 5, 7].map(d => {
+                            const locked = !isPro && d > entitlement.maxPlanDays;
+                            return (
+                              <button key={d} disabled={generatingPlan || foodPalette.length < 3} onClick={() => locked ? setUpgradeFeature("planLength") : void handleGeneratePlan(d)} style={{
+                                flex: 1, padding: "12px", borderRadius: "14px", fontSize: "12px", fontWeight: 700,
+                                border: locked ? "1px dashed #c9d4cc" : foodPalette.length < 3 ? "1px solid #dfe6e0" : "none",
+                                background: locked ? "transparent" : foodPalette.length < 3 ? "transparent" : "var(--green)",
+                                color: locked ? "#9aa49d" : foodPalette.length < 3 ? "#9aa49d" : "#1c2920",
+                                opacity: generatingPlan ? 0.6 : 1,
+                              }}>{generatingPlan && !locked ? "..." : `${d} days${locked ? " 🔒" : ""}`}</button>
+                            );
+                          })}
                         </div>
                         {planError && <p style={{ color: "#c75b39", fontSize: "11px", margin: "12px 0 0" }}>{planError}</p>}
                       </div>
@@ -1570,7 +1614,15 @@ export default function Home() {
                 </>
               )}
               {tab === "grocery" && <Grocery items={groceryItems} ready={groceryReady} weekLabel={groceryWeekLabel} onToggle={toggleGroceryItem} onAddCustom={addCustomGroceryItem} onRemoveCustom={removeCustomGroceryItem} onOpenPlan={() => setTab("plan")} />}
-              {tab === "recipes" && <RecipeCreator onLogRecipe={logRecipe} />}
+              {tab === "recipes" && (isPro
+                ? <RecipeCreator onLogRecipe={logRecipe} />
+                : (
+                  <div className="history-empty" style={{ textAlign: "center" }}>
+                    <strong>🍳 Recipe Creator is a Pro feature</strong>
+                    <span>Turn any recipe into per-serving macros and log it in one tap.</span>
+                    <button className="primary" style={{ marginTop: "14px" }} onClick={() => setUpgradeFeature("recipeCreator")}>See Pro →</button>
+                  </div>
+                ))}
               {tab === "progress" && <>
                 <Progress range={range} setRange={setRange} history={mealHistory} target={target} proteinTarget={macroTargets.protein} weightLogs={weightLogs} weightUnit={profile?.weight_unit || "kg"} onLogWeight={() => setModal("weight")} />
                 <WeeklySummary profile={profile} />
@@ -1582,6 +1634,8 @@ export default function Home() {
           {navItems.map(item => <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => { setTab(item.id); if (item.id !== "plan") setPlanSubView("week"); }}><span>{item.icon}</span><small>{item.label}</small></button>)}
         </nav>
       </section>
+
+      {upgradeFeature && <UpgradePrompt feature={upgradeFeature} onClose={() => setUpgradeFeature(null)} />}
 
       {toast && <div className="toast"><span>✓</span>{toast}</div>}
       {legacyImport && <div className="modal-backdrop"><section className="modal-sheet">
