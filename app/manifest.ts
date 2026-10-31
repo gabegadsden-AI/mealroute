@@ -9,11 +9,14 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "MealRoute",
     description:
       "AI meal planning, photo and barcode food logging, and one-tap re-logging. Plan your meals. Track your way.",
+    id: "/",
     start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#ffffff",
+    // Matches the app's own surface so the installed-app launch screen blends
+    // into the first painted frame instead of flashing stark white.
+    background_color: "#f9fafb",
     theme_color: "#5db04d",
     categories: ["health", "fitness", "food", "lifestyle"],
     icons: [
