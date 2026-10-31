@@ -162,6 +162,10 @@ export default function Home() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [dataReady, setDataReady] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const dataReadyRef = useRef(false);
+  useEffect(() => {
+    dataReadyRef.current = dataReady;
+  }, [dataReady]);
   const [mealHistory, setMealHistory] = useState<MealHistory>({});
   const [plannedMeals, setPlannedMeals] = useState<Meal[]>([]);
   const [planWeekStart, setPlanWeekStart] = useState("");
@@ -264,6 +268,25 @@ export default function Home() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Boot watchdog: the loader must never sit forever with no explanation.
+  // If the account hasn't loaded within 20s, or the device goes offline
+  // mid-load, surface an actionable screen instead of a static picture.
+  useEffect(() => {
+    if (dataReady || loadFailed) return;
+
+    const timer = window.setTimeout(() => {
+      if (!dataReadyRef.current) setLoadFailed(true);
+    }, 20000);
+
+    const onOffline = () => setLoadFailed(true);
+    window.addEventListener("offline", onOffline);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, [dataReady, loadFailed]);
 
   useEffect(() => {
     let active = true;
@@ -1499,7 +1522,7 @@ export default function Home() {
 
         <div className="content">
           {loadFailed
-            ? <div className="history-empty"><strong>We couldn’t load your account</strong><span>Check your internet connection, then retry. If it keeps failing, your data is safe — this only affects loading, not what’s saved.</span><button className="primary" style={{ marginTop: "14px" }} onClick={() => window.location.reload()}>Retry</button></div>
+            ? <div className="history-empty"><strong>We couldn’t load your account</strong><span>Check your internet connection, then retry. If it keeps failing, your data is safe — this only affects loading, not what’s saved.</span><button className="primary" style={{ marginTop: "14px" }} onClick={() => window.location.replace(window.location.pathname + "?r=" + Date.now())}>Retry</button></div>
             : !dataReady
             ? <div className="history-empty"><strong>Loading your MealRoute account…</strong><span>Your meals, plan, History, and saved products are being restored securely.</span></div>
             : <>
